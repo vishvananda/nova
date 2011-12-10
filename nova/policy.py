@@ -17,6 +17,7 @@
 
 """Policy Engine For Nova"""
 
+import os
 
 from nova import exception
 from nova import flags
@@ -26,6 +27,18 @@ from nova.common import policy
 FLAGS = flags.FLAGS
 flags.DEFINE_string('policy_file', 'policy.json',
                     _('JSON file representing policy'))
+
+_POLICY_PATH = None
+_POLICY_MTIME = None
+
+def _load_if_modified(path):
+    global _POLICY_MTIME
+    mtime = os.path.getmtime(path)
+    if mtime != _POLICY_MTIME:
+        policy.load_json(path)
+        _POLICY_MTIME = mtime
+
+
 
 def enforce(context, action, target):
     """Verifies that the action is valid on the target in this context.
@@ -44,14 +57,14 @@ def enforce(context, action, target):
        :raises: `nova.exception.PolicyNotAllowed` if verification fails.
 
     """
-    if not policy.HttpBrain.rules:
-        #TODO(vish): check mtime and reload
-        path = utils.find_config(FLAGS.policy_file)
-        policy.load_json(path)
+    global _POLICY_PATH
 
+    if not _POLICY_PATH:
+        _POLICY_PATH = utils.find_config(FLAGS.policy_file)
+    _load_if_modified(_POLICY_PATH)
     match_list = ('rule:%s' % action,)
     target_dict = target
-    credentials_dict = context
+    credentials_dict = context.to_dict()
     try:
         policy.enforce(match_list, target_dict, credentials_dict)
     except policy.NotAllowed:
