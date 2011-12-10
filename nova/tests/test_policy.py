@@ -20,24 +20,52 @@
 import urllib2
 import StringIO
 
-from nova import test
-from nova import policy
+from nova import context
 from nova import exception
+from nova import flags
+from nova import policy
+from nova import test
+from nova import utils
+from nova.common import policy as common_policy
+
+FLAGS = flags.FLAGS
 
 
-class PolicyCheckTestCase(test.TestCase):
+class PolicyFileTestCase(test.TestCase):
     def setUp(self):
-        super(PolicyCheckTestCase, self).setUp()
-        self.context = {'tenant_id' : 'bob'}
+        self.flags(policy_file='nova/tests/policy.json')
+
+
+
+class PolicyTestCase(test.TestCase):
+    def setUp(self):
+        super(PolicyTestCase, self).setUp()
+        # NOTE(vish): preload rules to circumvent reloading from file
+        policy._load_if_modified(utils.find_config(FLAGS.policy_file))
+        common_policy.Brain.rules = None
+        rules = {
+            "true" : [],
+            "example:allowed" : [],
+            "example:denied" : [["false:false"]],
+            "example:get_http": [["http:http://www.example.com"]],
+            "example:my_file": [["role:compute_admin"],
+                                ["project_id:%(project_id)s"]],
+            "example:early_and_fail" : [["false:false", "rule:true"]],
+            "example:early_or_success" : [["rule:true"], ["false:false"]]
+        }
+        common_policy.HttpBrain(rules)
+        self.context = context.RequestContext('fake', 'fake')
         self.target = {}
 
     def test_enforce_nonexistent_action_throws(self):
         action = "example:noexist"
-        self.assertRaises(exception.PolicyNotAllowed, policy.enforce, self.context, action, self.target)
+        self.assertRaises(exception.PolicyNotAllowed, policy.enforce,
+                          self.context, action, self.target)
 
     def test_enforce_bad_action_throws(self):
         action = "example:denied"
-        self.assertRaises(exception.PolicyNotAllowed, policy.enforce, self.context, action, self.target)    
+        self.assertRaises(exception.PolicyNotAllowed, policy.enforce,
+                          self.context, action, self.target)
 
     def test_enforce_good_action(self):
         action = "example:allowed"
@@ -49,9 +77,8 @@ class PolicyCheckTestCase(test.TestCase):
             return StringIO.StringIO("True")
         self.stubs.Set(urllib2, 'urlopen', fakeurlopen)
         action = "example:get_http"
-        context = {}
         target = {}
-        result = policy.enforce(context, action, target)
+        result = policy.enforce(self.context, action, target)
         self.assertEqual(result, None)
 
     def test_enforce_http_false(self):
@@ -60,21 +87,23 @@ class PolicyCheckTestCase(test.TestCase):
             return StringIO.StringIO("False")
         self.stubs.Set(urllib2, 'urlopen', fakeurlopen)
         action = "example:get_http"
-        context = {}
         target = {}
-        self.assertRaises(exception.PolicyNotAllowed, policy.enforce, context, action, target)
+        self.assertRaises(exception.PolicyNotAllowed, policy.enforce,
+                          self.context, action, target)
 
     def test_templatized_enforcement(self):
-        target_mine = {'tenant_id' : 'bob'}
-        target_not_mine = {'tenant_id' : 'fred'}
+        target_mine = {'project_id' : 'fake'}
+        target_not_mine = {'project_id' : 'another'}
         action = "example:my_file"
         policy.enforce(self.context, action, target_mine)
-        self.assertRaises(exception.PolicyNotAllowed, policy.enforce, self.context, action, target_not_mine)
-    
+        self.assertRaises(exception.PolicyNotAllowed, policy.enforce,
+                          self.context, action, target_not_mine)
+
     def test_early_AND_enforcement(self):
         action = "example:early_and_fail"
-        self.assertRaises(exception.PolicyNotAllowed, policy.enforce, self.context, action, self.target)
-    
+        self.assertRaises(exception.PolicyNotAllowed, policy.enforce,
+                          self.context, action, self.target)
+
     def test_early_OR_enforcement(self):
         action = "example:early_or_success"
         policy.enforce(self.context, action, self.target)
