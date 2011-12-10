@@ -23,32 +23,35 @@ from nova import exception
 
 
 class PolicyCheckTestCase(test.TestCase):
+    def setUp(self):
+        super(PolicyCheckTestCase, self).setUp()
+        self.context = {'tenant_id' : 'bob'}
+        self.target = {}
     
     def test_enforce_bad_action_throws(self):
-        context = {}
         action = "example:denied"
-        target = {}
-        self.assertRaises(exception.PolicyNotAllowed, policy.enforce, context, action, target)    
+        self.assertRaises(exception.PolicyNotAllowed, policy.enforce, self.context, action, self.target)    
         
     def test_enforce_good_action(self):
-        context = {}
         action = "example:allowed"
-        target = {}
-        result = policy.enforce(context, action, target)
-        self.assertEqual(result, None)
+        policy.enforce(self.context, action, self.target)
     
     def test_enforce_http_check(self):
         action = "example:get_google"
-        context = {}
-        target = {}
-        result = policy.enforce(context, action, target)
-        self.assertEqual(result, None)
+        policy.enforce(self.context, action, self.target)
     
     def test_templatized_enforcement(self):
-        context = {'tenant_id' : 'bob'}
         target_mine = {'tenant_id' : 'bob'}
         target_not_mine = {'tenant_id' : 'fred'}
         action = "example:my_file"
-        result = policy.enforce(context, action, target_mine)
-        self.assertEqual(result, None)
-        self.assertRaises(exception.PolicyNotAllowed, policy.enforce, context, action, target_not_mine)
+        policy.enforce(self.context, action, target_mine)
+        self.assertRaises(exception.PolicyNotAllowed, policy.enforce, self.context, action, target_not_mine)
+    
+    def test_early_AND_enforcement(self):
+        action = "example:early_and_fail"
+        self.assertRaises(exception.PolicyNotAllowed, policy.enforce, self.context, action, self.target)
+    
+    def test_early_OR_enforcement(self):
+        action = "example:early_or_success"
+        policy.enforce(self.context, action, self.target)
+        
