@@ -125,10 +125,13 @@ class HttpBrain(Brain):
     def _check_http(self, match, target_dict, cred_dict):
         url = match % target_dict
         data = {'target': json.dumps(target_dict),
-                        'credentials': json.dumps(cred_dict)}
+                'credentials': json.dumps(cred_dict)}
         post_data = urllib.urlencode(data)
         f = urllib2.urlopen(url, post_data)
-        if f.read():
+        # NOTE(vish): This is to show how we could do remote requests,
+        #             but some fancier method for response codes should
+        #             probably be defined
+        if f.read() == "True":
             return True
         return False
 
