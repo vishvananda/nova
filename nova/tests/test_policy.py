@@ -22,8 +22,6 @@ from nova import exception
 
 
 class PolicyCheckTestCase(test.TestCase):
-    def setUp(self):
-        pass
     
     def test_enforce_bad_action_throws(self):
         context = {}
