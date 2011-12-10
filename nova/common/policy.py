@@ -94,6 +94,8 @@ class Brain(object):
 
     def _check_rule(self, match, target_dict, cred_dict):
         new_match_list = self.rules.get(match)
+        if new_match_list is None:
+            return False
         return self.check(new_match_list, target_dict, cred_dict)
 
     def _check_generic(self, match, target_dict, cred_dict):
