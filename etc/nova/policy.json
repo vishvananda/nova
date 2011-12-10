@@ -1,0 +1,1 @@
+{'compute:get_volume': ('role:compute_admin', ('tenant_id:%(tenant_id)s', 'role:compute_sysadmin')), 'compute:get_instance': ('role:compute_admin', ('tenant_id:%(tenant_id)s', 'role:compute_sysadmin'))}

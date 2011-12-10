@@ -15,6 +15,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+"""Test of Policy Engine For Nova"""
 
 from nova import test
 from nova import policy
@@ -27,4 +28,14 @@ class PolicyCheckTestCase(test.TestCase):
         context = {}
         action = "NOT_ALLOWED"
         target = {}
-        self.assertRaises(exception.PolicyNotAllowed, policy.enforce, context, action, target)
+        self.assertRaises(exception.PolicyNotAllowed, policy.enforce, context, action, target)    
+        
+    def test_enforce_good_action(self):
+        context = {}
+        action = "ALLOWED"
+        target = {}
+        result = policy.enforce(context, action, target)
+        self.assertEqual(result, None)
+    
+    def test_templatized_enforcement(self):
+        context = {}
