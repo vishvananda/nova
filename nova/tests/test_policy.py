@@ -17,6 +17,9 @@
 
 """Test of Policy Engine For Nova"""
 
+import urllib2
+import StringIO
+
 from nova import test
 from nova import policy
 from nova import exception
@@ -43,12 +46,26 @@ class PolicyCheckTestCase(test.TestCase):
         result = policy.enforce(context, action, target)
         self.assertEqual(result, None)
 
-    def test_enforce_http_check(self):
-        action = "example:get_google"
+    def test_enforce_http_true(self):
+
+        def fakeurlopen(url, post_data):
+            return StringIO.StringIO("True")
+        self.stubs.Set(urllib2, 'urlopen', fakeurlopen)
+        action = "example:get_http"
         context = {}
         target = {}
         result = policy.enforce(context, action, target)
         self.assertEqual(result, None)
+
+    def test_enforce_http_false(self):
+
+        def fakeurlopen(url, post_data):
+            return StringIO.StringIO("False")
+        self.stubs.Set(urllib2, 'urlopen', fakeurlopen)
+        action = "example:get_http"
+        context = {}
+        target = {}
+        self.assertRaises(exception.PolicyNotAllowed, policy.enforce, context, action, target)
 
     def test_templatized_enforcement(self):
         context = {'tenant_id' : 'bob'}
