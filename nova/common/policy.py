@@ -63,6 +63,9 @@ class Brain(object):
         self.rules[key] = match
 
     def check(self, match_list, target_dict, cred_dict):
+        if not match_list:
+            return True
+        
         for and_list in match_list:
             matched = False
             if type(and_list) == str:
