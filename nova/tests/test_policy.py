@@ -42,10 +42,6 @@ class PolicyCheckTestCase(test.TestCase):
     def test_enforce_good_action(self):
         action = "example:allowed"
         policy.enforce(self.context, action, self.target)
-    
-    def test_enforce_http_check(self):
-        action = "example:get_http"
-        policy.enforce(self.context, action, self.target)
 
     def test_enforce_http_true(self):
 
