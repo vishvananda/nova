@@ -29,5 +29,4 @@ def enforce(context, action, target):
     """
     if False:
         raise exception.PolicyNotAllowed(action=action)
-    pass
 
