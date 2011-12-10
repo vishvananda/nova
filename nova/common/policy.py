@@ -65,8 +65,10 @@ class Brain(object):
     def check(self, match_list, target_dict, cred_dict):
         for and_list in match_list:
             matched = False
+            if isinstance(and_list, basestring):
+                and_list = (and_list,)
             for match in and_list:
-                match_kind, match = match.split(':', 2)
+                match_kind, match = match.split(':', 1)
                 if hasattr(self, '_check_%s' % match_kind):
                     f = getattr(self, '_check_%s' % match_kind)
                     rv = f(match, target_dict, cred_dict)
@@ -74,7 +76,7 @@ class Brain(object):
                         matched = False
                         break
                 else:
-                    rv = self._check(match, target_dict, cred_dict)
+                    rv = self._check_generic(match, target_dict, cred_dict)
                     if not rv:
                         matched = False
                         break
@@ -103,7 +105,7 @@ class Brain(object):
 
         # TODO(termie): do dict inspection via dot syntax
         match = match % target_dict
-        key, value = match.split(':', 2)
+        key, value = match.split(':', 1)
         if key in cred_dict:
             return value == cred_dict[key]
         return False
@@ -129,4 +131,6 @@ class HttpBrain(object):
 
 def load_json(path):
     rules_dict = json.load(open(path))
+    import nose
+    nose.tools.set_trace()
     b = Brain(rules=rules_dict)

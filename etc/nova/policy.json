@@ -1,8 +1,8 @@
 {
-    'compute:get_volume': ('role:compute_admin', ('tenant_id:%(tenant_id)s', 'role:compute_sysadmin')), 
-    'compute:get_instance': ('role:compute_admin', ('tenant_id:%(tenant_id)s', 'role:compute_sysadmin')),
-    'example:get_google': (('http:http://www.google.com',), ('role:compute_sysadmin',)),
-    'example:my_file': ('role:compute_admin', ('tenant_id:%(tenant_id)s',))
-    'example:allowed' : (),
-    'example:denied' : ('false:false',),
+    "compute:get_volume": [["role:compute_admin"], ["tenant_id:%(tenant_id)s", "role:compute_sysadmin"]],
+    "compute:get_instance": [["role:compute_admin"], ["tenant_id:%(tenant_id)s", "role:compute_sysadmin"]],
+    "example:get_google": [["http:http://www.google.com"], ["role:compute_sysadmin"]],
+    "example:my_file": [["role:compute_admin"], ["tenant_id:%(tenant_id)s"]],
+    "example:allowed": [],
+    "example:denied": ["false:false"]
 }
