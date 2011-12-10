@@ -1,6 +1,6 @@
 # vim: tabstop=4 shiftwidth=4 softtabstop=4
 
-# Copyright 2011 United States
+# Copyright (c) 2011 OpenStack, LLC.
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -19,14 +19,30 @@
 
 
 from nova import exception
+from nova.common import policy
 
 
 def enforce(context, action, target):
-    """Verifies that the action is valid on the Target.
+    """Verifies that the action is valid on the target in this context.
 
-       raises exception.PolicyNotAllowed if verification fails.
+       :param context: nova context
+       :param action: string representing the action to be checked
+           this should be colon separated for clarity.
+           i.e. compute:create_instance
+                compute:attach_volume
+                volume:attach_volume
+
+       :param object: dictionary representing the object of the action
+           for object creation this should be a dictionary representing the
+           location of the object e.g. {'project_id': context.project_id}
+
+       :raises: PolicyNotAllowed if verification fails.
 
     """
-    if False:
+    match_list = ('rule:%s' % action,)
+    target_dict = target
+    credentials_dict = context.to_dict()
+    try:
+        policy.enforce(match_list, target_dict, credentials_dict)
+    except policy.NotAllowed:
         raise exception.PolicyNotAllowed(action=action)
-
