@@ -135,4 +135,4 @@ class HttpBrain(Brain):
 
 def load_json(path):
     rules_dict = json.load(open(path))
-    b = Brain(rules=rules_dict)
+    b = HttpBrain(rules=rules_dict)
