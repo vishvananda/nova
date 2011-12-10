@@ -26,16 +26,29 @@ class PolicyCheckTestCase(test.TestCase):
     
     def test_enforce_bad_action_throws(self):
         context = {}
-        action = "NOT_ALLOWED"
+        action = "example:denied"
         target = {}
         self.assertRaises(exception.PolicyNotAllowed, policy.enforce, context, action, target)    
         
     def test_enforce_good_action(self):
         context = {}
-        action = "ALLOWED"
+        action = "example:allowed"
+        target = {}
+        result = policy.enforce(context, action, target)
+        self.assertEqual(result, None)
+    
+    def test_enforce_http_check(self):
+        action = "example:get_google"
+        context = {}
         target = {}
         result = policy.enforce(context, action, target)
         self.assertEqual(result, None)
     
     def test_templatized_enforcement(self):
-        context = {}
+        context = {'tenant_id' : 'bob'}
+        target_mine = {'tenant_id' : 'bob'}
+        target_not_mine = {'tenant_id' : 'fred'}
+        action = "example:my_file"
+        result = policy.enforce(context, action, target_mine)
+        self.assertEqual(result, None)
+        self.assertRaises(exception.PolicyNotAllowed, policy.enforce, context, action, target_not_mine)
