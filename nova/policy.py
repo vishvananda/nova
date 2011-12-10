@@ -19,8 +19,13 @@
 
 
 from nova import exception
+from nova import flags
+from nova import utils
 from nova.common import policy
 
+FLAGS = flags.FLAGS
+flags.DEFINE_string('policy_file', 'policy.json',
+                    _('JSON file representing policy'))
 
 def enforce(context, action, target):
     """Verifies that the action is valid on the target in this context.
@@ -36,12 +41,17 @@ def enforce(context, action, target):
            for object creation this should be a dictionary representing the
            location of the object e.g. {'project_id': context.project_id}
 
-       :raises: PolicyNotAllowed if verification fails.
+       :raises: `nova.exception.PolicyNotAllowed` if verification fails.
 
     """
+    if not policy.Brain.rules:
+        #TODO(vish): check mtime and reload
+        path = utils.find_config(FLAGS.policy_file)
+        policy.load_json(path)
+
     match_list = ('rule:%s' % action,)
     target_dict = target
-    credentials_dict = context.to_dict()
+    credentials_dict = context
     try:
         policy.enforce(match_list, target_dict, credentials_dict)
     except policy.NotAllowed:
