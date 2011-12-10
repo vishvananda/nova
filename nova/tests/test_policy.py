@@ -18,6 +18,7 @@
 
 from nova import test
 from nova import policy
+from nova import exception
 
 
 class PolicyCheckTestCase(test.TestCase):
