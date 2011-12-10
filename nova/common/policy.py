@@ -22,7 +22,7 @@ import urllib
 import urllib2
 
 
-def NotAllowed(Exception):
+class NotAllowed(Exception):
         pass
 
 
@@ -46,7 +46,7 @@ def enforce(match_list, target_dict, credentials_dict):
     performing the action.
 
     """
-    b = Brain()
+    b = HttpBrain()
     if not b.check(match_list, target_dict, credentials_dict):
         raise NotAllowed()
 
@@ -63,15 +63,17 @@ class Brain(object):
         self.rules[key] = match
 
     def check(self, match_list, target_dict, cred_dict):
+        if not match_list:
+            return True
         for and_list in match_list:
             matched = False
             if isinstance(and_list, basestring):
                 and_list = (and_list,)
             for match in and_list:
-                match_kind, match = match.split(':', 1)
+                match_kind, match_value = match.split(':', 1)
                 if hasattr(self, '_check_%s' % match_kind):
                     f = getattr(self, '_check_%s' % match_kind)
-                    rv = f(match, target_dict, cred_dict)
+                    rv = f(match_value, target_dict, cred_dict)
                     if not rv:
                         matched = False
                         break
@@ -90,7 +92,9 @@ class Brain(object):
         return False
 
     def _check_rule(self, match, target_dict, cred_dict):
-        new_match_list = self.rules.get(match[5:])
+        new_match_list = self.rules.get(match)
+        if new_match_list is None:
+            return False
         return self.check(new_match_list, target_dict, cred_dict)
 
     def _check_generic(self, match, target_dict, cred_dict):
@@ -111,7 +115,7 @@ class Brain(object):
         return False
 
 
-class HttpBrain(object):
+class HttpBrain(Brain):
     """A brain that can check external urls a
 
     Posts json blobs for target and credentials.
@@ -131,6 +135,4 @@ class HttpBrain(object):
 
 def load_json(path):
     rules_dict = json.load(open(path))
-    import nose
-    nose.tools.set_trace()
     b = Brain(rules=rules_dict)
