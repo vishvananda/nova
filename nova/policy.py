@@ -44,7 +44,7 @@ def enforce(context, action, target):
        :raises: `nova.exception.PolicyNotAllowed` if verification fails.
 
     """
-    if not policy.Brain.rules:
+    if not policy.HttpBrain.rules:
         #TODO(vish): check mtime and reload
         path = utils.find_config(FLAGS.policy_file)
         policy.load_json(path)

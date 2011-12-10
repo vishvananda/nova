@@ -46,7 +46,7 @@ def enforce(match_list, target_dict, credentials_dict):
     performing the action.
 
     """
-    b = Brain()
+    b = HttpBrain()
     if not b.check(match_list, target_dict, credentials_dict):
         raise NotAllowed()
 
@@ -112,7 +112,7 @@ class Brain(object):
         return False
 
 
-class HttpBrain(object):
+class HttpBrain(Brain):
     """A brain that can check external urls a
 
     Posts json blobs for target and credentials.
@@ -132,4 +132,4 @@ class HttpBrain(object):
 
 def load_json(path):
     rules_dict = json.load(open(path))
-    b = Brain(rules=rules_dict)
+    b = HttpBrain(rules=rules_dict)
