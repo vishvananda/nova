@@ -22,7 +22,7 @@ import urllib
 import urllib2
 
 
-def NotAllowed(Exception):
+class NotAllowed(Exception):
         pass
 
 
@@ -65,8 +65,10 @@ class Brain(object):
     def check(self, match_list, target_dict, cred_dict):
         for and_list in match_list:
             matched = False
-            for match in and_list:
-                match_kind, match = match.split(':', 2)
+            if type(and_list) == str:
+                and_list = (and_list,)
+            for match_value in and_list:
+                match_kind, match = match_value.split(':', 1)
                 if hasattr(self, '_check_%s' % match_kind):
                     f = getattr(self, '_check_%s' % match_kind)
                     rv = f(match, target_dict, cred_dict)
@@ -74,7 +76,7 @@ class Brain(object):
                         matched = False
                         break
                 else:
-                    rv = self._check(match, target_dict, cred_dict)
+                    rv = self._check_generic(match_value, target_dict, cred_dict)
                     if not rv:
                         matched = False
                         break
@@ -88,7 +90,7 @@ class Brain(object):
         return False
 
     def _check_rule(self, match, target_dict, cred_dict):
-        new_match_list = self.rules.get(match[5:])
+        new_match_list = self.rules.get(match)
         return self.check(new_match_list, target_dict, cred_dict)
 
     def _check_generic(self, match, target_dict, cred_dict):
@@ -103,7 +105,8 @@ class Brain(object):
 
         # TODO(termie): do dict inspection via dot syntax
         match = match % target_dict
-        key, value = match.split(':', 2)
+        print match
+        key, value = match.split(':', 1)
         if key in cred_dict:
             return value == cred_dict[key]
         return False
