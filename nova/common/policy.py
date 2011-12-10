@@ -65,21 +65,20 @@ class Brain(object):
     def check(self, match_list, target_dict, cred_dict):
         if not match_list:
             return True
-        
         for and_list in match_list:
             matched = False
-            if type(and_list) == str:
+            if isinstance(and_list, basestring):
                 and_list = (and_list,)
-            for match_value in and_list:
-                match_kind, match = match_value.split(':', 1)
+            for match in and_list:
+                match_kind, match_value = match.split(':', 1)
                 if hasattr(self, '_check_%s' % match_kind):
                     f = getattr(self, '_check_%s' % match_kind)
-                    rv = f(match, target_dict, cred_dict)
+                    rv = f(match_value, target_dict, cred_dict)
                     if not rv:
                         matched = False
                         break
                 else:
-                    rv = self._check_generic(match_value, target_dict, cred_dict)
+                    rv = self._check_generic(match, target_dict, cred_dict)
                     if not rv:
                         matched = False
                         break
@@ -110,7 +109,6 @@ class Brain(object):
 
         # TODO(termie): do dict inspection via dot syntax
         match = match % target_dict
-        print match
         key, value = match.split(':', 1)
         if key in cred_dict:
             return value == cred_dict[key]

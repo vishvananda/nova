@@ -27,11 +27,15 @@ class PolicyCheckTestCase(test.TestCase):
         super(PolicyCheckTestCase, self).setUp()
         self.context = {'tenant_id' : 'bob'}
         self.target = {}
-    
+
+    def test_enforce_nonexistent_action_throws(self):
+        action = "example:noexist"
+        self.assertRaises(exception.PolicyNotAllowed, policy.enforce, self.context, action, self.target)
+
     def test_enforce_bad_action_throws(self):
         action = "example:denied"
         self.assertRaises(exception.PolicyNotAllowed, policy.enforce, self.context, action, self.target)    
-        
+
     def test_enforce_good_action(self):
         action = "example:allowed"
         policy.enforce(self.context, action, self.target)
@@ -39,7 +43,14 @@ class PolicyCheckTestCase(test.TestCase):
     def test_enforce_http_check(self):
         action = "example:get_google"
         policy.enforce(self.context, action, self.target)
-    
+
+    def test_enforce_http_check(self):
+        action = "example:get_google"
+        context = {}
+        target = {}
+        result = policy.enforce(context, action, target)
+        self.assertEqual(result, None)
+
     def test_templatized_enforcement(self):
         target_mine = {'tenant_id' : 'bob'}
         target_not_mine = {'tenant_id' : 'fred'}
@@ -54,4 +65,3 @@ class PolicyCheckTestCase(test.TestCase):
     def test_early_OR_enforcement(self):
         action = "example:early_or_success"
         policy.enforce(self.context, action, self.target)
-        
