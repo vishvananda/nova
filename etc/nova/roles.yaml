@@ -1,0 +1,7 @@
+roles:
+- 'netadmin'
+- 'sysadmin'
+- 'admin'
+- 'member'
+- 'keystoneadmin'
+- 'keystoneserviceadmin'

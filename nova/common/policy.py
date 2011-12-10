@@ -97,6 +97,11 @@ class Brain(object):
             return False
         return self.check(new_match_list, target_dict, cred_dict)
 
+    def _check_role(self, match, target_dict, cred_dict):
+        if cred_dict['is_admin']:
+            return True
+        return match in cred_dict['roles']
+
     def _check_generic(self, match, target_dict, cred_dict):
         """Check an individual match.
 
