@@ -549,14 +549,18 @@ class API(base.Base):
         policy.enforce(context, "compute:create_instance", target)
         
         if requested_networks:
-            target['requested_networks'] = requested_networks
-            policy.enforce(context, "compute:attach_network", target)
-            policy.enforce(context, "network:attach_network", target)
+            for network in requested_networks:
+                # TODO(JMC): I realize this doesn't work for quantum nets yet...
+                (net_id, _i) = network
+                network_obj = self.network_api.get(context, net_id)
+                policy.enforce(context, "compute:attach_network", network_obj)
+                policy.enforce(context, "network:attach_network", network_obj)
         
         if block_device_mapping:
-            target['block_device'] = block_device_mapping
-            policy.enforce(context, "compute:attach_volume", target)
-            policy.enforce(context, "volume:attach_volume", target)
+            for bdm in block_device_mapping:
+                volume_obj = self.volume_api.get(context, bdm['volume_id'])
+                policy.enforce(context, "compute:attach_volume", volume_obj)
+                policy.enforce(context, "volume:attach_volume", volume_obj)
 
         # We can create the DB entry for the instance here if we're
         # only going to create 1 instance and we're in a single
