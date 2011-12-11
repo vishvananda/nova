@@ -51,11 +51,19 @@ class PolicyTestCase(test.TestCase):
             "example:my_file": [["role:compute_admin"],
                                 ["project_id:%(project_id)s"]],
             "example:early_and_fail" : [["false:false", "rule:true"]],
-            "example:early_or_success" : [["rule:true"], ["false:false"]]
+            "example:early_or_success" : [["rule:true"], ["false:false"]],
+            "example:sysadmin_allowed" : [["role:sysadmin"]],
         }
         common_policy.HttpBrain(rules)
         self.context = context.RequestContext('fake', 'fake')
+        self.admin_context = context.RequestContext('admin', 'fake', is_admin=True)
         self.target = {}
+
+    def test_admin_has_all_roles(self):
+        action = "example:sysadmin_allowed"
+        self.assertRaises(exception.PolicyNotAllowed, policy.enforce,
+                          self.context, action, self.target)
+        policy.enforce(self.admin_context, action, self.target)
 
     def test_enforce_nonexistent_action_throws(self):
         action = "example:noexist"
