@@ -29,6 +29,7 @@ from nova import flags
 import nova.image
 from nova import log as logging
 from nova import network
+from nova import policy
 from nova import quota
 from nova import rpc
 from nova import utils
@@ -542,6 +543,20 @@ class API(base.Base):
         could be 'None' or a list of instance dicts depending on if
         we waited for information from the scheduler or not.
         """
+        target = {'project_id' : context.project_id,
+                  'user_id' : context.user_id,
+                  'availability_zone' : availability_zone}
+        policy.enforce(context, "compute:create_instance", target)
+        
+        if requested_networks:
+            target['requested_networks'] = requested_networks
+            policy.enforce(context, "compute:attach_network", target)
+            policy.enforce(context, "network:attach_network", target)
+        
+        if block_device_mapping:
+            target['block_device'] = block_device_mapping
+            policy.enforce(context, "compute:attach_volume", target)
+            policy.enforce(context, "volume:attach_volume", target)
 
         # We can create the DB entry for the instance here if we're
         # only going to create 1 instance and we're in a single
