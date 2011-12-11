@@ -52,11 +52,11 @@ class PolicyTestCase(test.TestCase):
                                 ["project_id:%(project_id)s"]],
             "example:early_and_fail" : [["false:false", "rule:true"]],
             "example:early_or_success" : [["rule:true"], ["false:false"]],
-            "example:sysadmin_allowed" : [["role:sysadmin"]],
+            "example:sysadmin_allowed" : [["role:admin"], ["role:sysadmin"]],
         }
         common_policy.HttpBrain(rules)
-        self.context = context.RequestContext('fake', 'fake')
-        self.admin_context = context.RequestContext('admin', 'fake', is_admin=True)
+        self.context = context.RequestContext('fake', 'fake', roles=['member'])
+        self.admin_context = context.RequestContext('admin', 'fake', roles=['admin'], is_admin=True)
         self.target = {}
 
     def test_admin_has_all_roles(self):

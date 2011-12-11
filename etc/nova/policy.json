@@ -1,6 +1,6 @@
 {
     "true" : [],
-    "compute:get_instance": [["role:admin"], ["project_id:%(project_id)s", "role:sysadmin"]],
-    "volume:attach_volume": [["role:admin"], ["project_id:%(project_id)s", "role:sysadmin"]],
-    "volume:create_volume": [["role:admin"], ["project_id:%(project_id)s", "role:sysadmin"]]
+    "compute:get_instance": [["role:admin"], ["project_id:%(project_id)s"]],
+    "volume:attach_volume": [["role:admin"], ["project_id:%(project_id)s"]],
+    "volume:create_volume": [["role:admin"], ["project_id:%(project_id)s"]]
 }
