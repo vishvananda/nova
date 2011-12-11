@@ -39,6 +39,13 @@ def _load_if_modified(path):
         _POLICY_MTIME = mtime
 
 
+def reset():
+    global _POLICY_PATH
+    global _POLICY_MTIME
+    _POLICY_PATH = None
+    _POLICY_MTIME = None
+    policy.Brain.rules = {}
+
 
 def enforce(context, action, target):
     """Verifies that the action is valid on the target in this context.
@@ -58,7 +65,6 @@ def enforce(context, action, target):
 
     """
     global _POLICY_PATH
-
     if not _POLICY_PATH:
         _POLICY_PATH = utils.find_config(FLAGS.policy_file)
     _load_if_modified(_POLICY_PATH)

@@ -17,7 +17,6 @@
 
 """Test of Policy Engine For Nova"""
 
-import os
 import StringIO
 import tempfile
 import urllib2
@@ -36,17 +35,15 @@ FLAGS = flags.FLAGS
 class PolicyFileTestCase(test.TestCase):
     def setUp(self):
         super(PolicyFileTestCase, self).setUp()
-        common_policy.Brain.rules = None
-        policy._POLICY_PATH = None
+        policy.reset()
         _, self.tmpfilename = tempfile.mkstemp()
         self.flags(policy_file=self.tmpfilename)
         self.context = context.RequestContext('fake', 'fake')
         self.target = {}
 
     def tearDown(self):
-        common_policy.Brain.rules = None
-        policy._POLICY_PATH = None
         super(PolicyFileTestCase, self).tearDown()
+        policy.reset()
 
     def test_modified_policy_reloads(self):
         action = "example:test"
@@ -64,6 +61,7 @@ class PolicyFileTestCase(test.TestCase):
 class PolicyTestCase(test.TestCase):
     def setUp(self):
         super(PolicyTestCase, self).setUp()
+        policy.reset()
         # NOTE(vish): preload rules to circumvent reloading from file
         policy._load_if_modified(utils.find_config(FLAGS.policy_file))
         common_policy.Brain.rules = None
@@ -85,8 +83,7 @@ class PolicyTestCase(test.TestCase):
         self.target = {}
 
     def tearDown(self):
-        common_policy.Brain.rules = None
-        policy._POLICY_PATH = None
+        policy.reset()
         super(PolicyTestCase, self).tearDown()
 
     def test_enforce_nonexistent_action_throws(self):
