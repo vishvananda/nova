@@ -17,8 +17,10 @@
 
 """Test of Policy Engine For Nova"""
 
-import urllib2
+import os
 import StringIO
+import tempfile
+import urllib2
 
 from nova import context
 from nova import exception
@@ -33,8 +35,28 @@ FLAGS = flags.FLAGS
 
 class PolicyFileTestCase(test.TestCase):
     def setUp(self):
-        self.flags(policy_file='nova/tests/policy.json')
+        super(PolicyFileTestCase, self).setUp()
+        _, self.tmpfilename = tempfile.mkstemp()
+        self.flags(policy_file=self.tmpfilename)
+        self.context = context.RequestContext('fake', 'fake')
+        self.target = {}
 
+    def tearDown(self):
+        common_policy.Brain.rules = None
+        policy._POLICY_PATH = None
+        super(PolicyFileTestCase, self).tearDown()
+
+    def test_modified_policy_reloads(self):
+        action = "example:test"
+        with open(self.tmpfilename, "w") as policyfile:
+            policyfile.write("""{"example:test": []}""")
+        policy.enforce(self.context, action, self.target)
+        with open(self.tmpfilename, "w") as policyfile:
+            policyfile.write("""{"example:test": ["false:false"]}""")
+        # NOTE(vish): reset stored mtime
+        policy._POLICY_MTIME = None
+        self.assertRaises(exception.PolicyNotAllowed, policy.enforce,
+                          self.context, action, self.target)
 
 
 class PolicyTestCase(test.TestCase):
@@ -56,6 +78,11 @@ class PolicyTestCase(test.TestCase):
         common_policy.HttpBrain(rules)
         self.context = context.RequestContext('fake', 'fake')
         self.target = {}
+
+    def tearDown(self):
+        common_policy.Brain.rules = None
+        policy._POLICY_PATH = None
+        super(PolicyTestCase, self).tearDown()
 
     def test_enforce_nonexistent_action_throws(self):
         action = "example:noexist"
