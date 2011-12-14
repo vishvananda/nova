@@ -33,7 +33,6 @@ terminating it.
 
 """
 
-import datetime
 import functools
 import os
 import socket
@@ -507,6 +506,15 @@ class ComputeManager(manager.SchedulerDependentManager):
                                                                 instance_id)
         return [bdm for bdm in bdms if bdm['volume_id']]
 
+    def _get_instance_volume_bdm(self, context, instance_id, volume_id):
+        bdms = self._get_instance_volume_bdms(context, instance_id)
+        for bdm in bdms:
+            # NOTE(vish): Comparing as strings because the os_api doesn't
+            #             convert to integer and we may wish to support uuids
+            #             in the future.
+            if str(bdm['volume_id']) == str(volume_id):
+                return bdm
+
     def _get_instance_volume_block_device_info(self, context, instance_id):
         bdms = self._get_instance_volume_bdms(context, instance_id)
         block_device_mapping = []
@@ -515,8 +523,8 @@ class ComputeManager(manager.SchedulerDependentManager):
             block_device_mapping.append({'connection_info': cinfo,
                                          'mount_device':
                                          bdm['device_name']})
-        ## NOTE(vish): The mapping is passed in so the driver can disconnect
-        ##             from remote volumes if necessary
+        # NOTE(vish): The mapping is passed in so the driver can disconnect
+        #             from remote volumes if necessary
         return {'block_device_mapping': block_device_mapping}
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
@@ -546,20 +554,26 @@ class ComputeManager(manager.SchedulerDependentManager):
         if not FLAGS.stub_network:
             self.network_api.deallocate_for_instance(context, instance)
 
-        for bdm in self._get_instance_volume_bdms(context, instance_id):
-            volume_id = bdm['volume_id']
-            try:
-                self._detach_volume(context, instance_uuid, volume_id)
-            except exception.DiskNotFound as exc:
-                LOG.warn(_("Ignoring DiskNotFound: %s") % exc)
-
         if instance['power_state'] == power_state.SHUTOFF:
             self.db.instance_destroy(context, instance_id)
             raise exception.Error(_('trying to destroy already destroyed'
                                     ' instance: %s') % instance_uuid)
+        # NOTE(vish) get bdms before destroying the instance
+        bdms = self._get_instance_volume_bdms(context, instance_id)
         block_device_info = self._get_instance_volume_block_device_info(
             context, instance_id)
         self.driver.destroy(instance, network_info, block_device_info, cleanup)
+        volume_api = volume.API()
+        for bdm in bdms:
+            try:
+                # NOTE(vish): actual driver detach done in driver.destroy, so
+                #             just tell nova-volume that we are done with it.
+                volume_api.terminate_connection(context,
+                                                bdm['volume_id'],
+                                                FLAGS.my_ip)
+                volume_api.detach(context, bdm['volume_id'])
+            except exception.DiskNotFound as exc:
+                LOG.warn(_("Ignoring DiskNotFound: %s") % exc)
 
     def _cleanup_volumes(self, context, instance_id):
         volume_api = volume.API()
@@ -1407,6 +1421,7 @@ class ComputeManager(manager.SchedulerDependentManager):
         volume_api.attach(context, volume_id, instance_id, mountpoint)
         return connection_info
 
+    @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @checks_instance_lock
     def attach_volume(self, context, instance_uuid, volume_id, mountpoint):
         """Attach a volume to an instance."""
@@ -1449,60 +1464,50 @@ class ComputeManager(manager.SchedulerDependentManager):
         self.db.block_device_mapping_create(context, values)
         return True
 
-    @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
-    @checks_instance_lock
-    def _detach_volume(self, context, instance_uuid, volume_id,
-                       destroy_bdm=False, mark_detached=True,
-                       force_detach=False):
-        """Detach a volume from an instance."""
-        context = context.elevated()
-        instance_ref = self.db.instance_get_by_uuid(context, instance_uuid)
-        instance_id = instance_ref['id']
-        bdms = self.db.block_device_mapping_get_all_by_instance(
-                context, instance_id)
-        for item in bdms:
-            # NOTE(vish): Comparing as strings because the os_api doesn't
-            #             convert to integer and we may wish to support uuids
-            #             in the future.
-            if str(item['volume_id']) == str(volume_id):
-                bdm = item
-                break
+    def _detach_volume(self, context, instance_name, bdm):
+        """Do the actual driver detach using block device mapping."""
         mp = bdm['device_name']
+        volume_id = bdm['volume_id']
 
         LOG.audit(_("Detach volume %(volume_id)s from mountpoint %(mp)s"
-                " on instance %(instance_id)s") % locals(), context=context)
-        volume_api = volume.API()
-        if (instance_ref['name'] not in self.driver.list_instances() and
-            not force_detach):
-            LOG.warn(_("Detaching volume from unknown instance %s"),
-                     instance_id, context=context)
-        else:
-            self.driver.detach_volume(utils.loads(bdm['connection_info']),
-                                      instance_ref['name'],
-                                      bdm['device_name'])
-        address = FLAGS.my_ip
-        volume_api.terminate_connection(context, volume_id, address)
-        if mark_detached:
-            volume_api.detach(context, volume_id)
-        if destroy_bdm:
-            self.db.block_device_mapping_destroy_by_instance_and_volume(
-                context, instance_id, volume_id)
-        return True
+                " on instance %(instance_name)s") % locals(), context=context)
 
+        if instance_name not in self.driver.list_instances():
+            LOG.warn(_("Detaching volume from unknown instance %s"),
+                     instance_name, context=context)
+        self.driver.detach_volume(utils.loads(bdm['connection_info']),
+                                  instance_name,
+                                  mp)
+
+    @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
+    @checks_instance_lock
     def detach_volume(self, context, instance_uuid, volume_id):
         """Detach a volume from an instance."""
-        return self._detach_volume(context, instance_uuid, volume_id, True)
+        instance_ref = self.db.instance_get_by_uuid(context, instance_uuid)
+        instance_id = instance_ref['id']
+        bdm = self._get_instance_volume_bdm(context, instance_id, volume_id)
+        self._detach_volume(context, instance_ref['name'], bdm)
+        volume_api = volume.API()
+        volume_api.terminate_connection(context, volume_id, FLAGS.my_ip)
+        volume_api.detach(context, volume_id)
+        self.db.block_device_mapping_destroy_by_instance_and_volume(
+            context, instance_id, volume_id)
+        return True
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     def remove_volume_connection(self, context, instance_id, volume_id):
-        """Detach a volume from an instance.,"""
+        """Remove a volume connection using the volume api"""
         # NOTE(vish): We don't want to actually mark the volume
         #             detached, or delete the bdm, just remove the
         #             connection from this host.
         try:
             instance_ref = self.db.instance_get(context, instance_id)
-            self._detach_volume(context, instance_ref['uuid'], volume_id,
-                                False, False, True)
+            bdm = self._get_instance_volume_bdm(context,
+                                                instance_id,
+                                                volume_id)
+            self._detach_volume(context, instance_ref['name'],
+                                bdm['volume_id'], bdm['device_name'])
+            volume.API().terminate_connection(context, volume_id, FLAGS.my_ip)
         except exception.NotFound:
             pass
 
