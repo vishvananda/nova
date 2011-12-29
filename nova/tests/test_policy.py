@@ -52,8 +52,8 @@ class PolicyFileTestCase(test.TestCase):
         policy.enforce(self.context, action, self.target)
         with open(self.tmpfilename, "w") as policyfile:
             policyfile.write("""{"example:test": ["false:false"]}""")
-        # NOTE(vish): reset stored mtime
-        policy._POLICY_MTIME = None
+        # NOTE(vish): reset stored cache
+        policy._POLICY_CACHE = {}
         self.assertRaises(exception.PolicyNotAllowed, policy.enforce,
                           self.context, action, self.target)
 
@@ -63,9 +63,8 @@ class PolicyTestCase(test.TestCase):
         super(PolicyTestCase, self).setUp()
         policy.reset()
         # NOTE(vish): preload rules to circumvent reloading from file
-        policy._load_if_modified(utils.find_config(FLAGS.policy_file))
-        common_policy.Brain.rules = None
-        policy._POLICY_PATH = None
+        utils.read_cached_file(utils.find_config(FLAGS.policy_file),
+                               policy._POLICY_CACHE)
         rules = {
             "true": [],
             "example:allowed": [],

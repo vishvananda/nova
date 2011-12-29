@@ -17,8 +17,6 @@
 
 """Policy Engine For Nova"""
 
-import os
-
 from nova import exception
 from nova import flags
 from nova import utils
@@ -29,23 +27,15 @@ flags.DEFINE_string('policy_file', 'policy.json',
                     _('JSON file representing policy'))
 
 _POLICY_PATH = None
-_POLICY_MTIME = None
-
-
-def _load_if_modified(path):
-    global _POLICY_MTIME
-    mtime = os.path.getmtime(path)
-    if mtime != _POLICY_MTIME:
-        policy.load_json(path)
-        _POLICY_MTIME = mtime
+_POLICY_CACHE = {}
 
 
 def reset():
     global _POLICY_PATH
-    global _POLICY_MTIME
+    global _POLICY_CACHE
     _POLICY_PATH = None
-    _POLICY_MTIME = None
-    policy.Brain.rules = {}
+    _POLICY_CACHE = {}
+    policy.HttpBrain.rules = {}
 
 
 def enforce(context, action, target):
@@ -68,7 +58,10 @@ def enforce(context, action, target):
     global _POLICY_PATH
     if not _POLICY_PATH:
         _POLICY_PATH = utils.find_config(FLAGS.policy_file)
-    _load_if_modified(_POLICY_PATH)
+    old = dict(_POLICY_CACHE)
+    data = utils.read_cached_file(_POLICY_PATH, _POLICY_CACHE)
+    if old != _POLICY_CACHE:
+        policy.load_json(data)
     match_list = ('rule:%s' % action,)
     target_dict = target
     credentials_dict = context.to_dict()

@@ -139,6 +139,6 @@ class HttpBrain(Brain):
         return False
 
 
-def load_json(path):
-    rules_dict = json.load(open(path))
+def load_json(data):
+    rules_dict = json.loads(data)
     b = HttpBrain(rules=rules_dict)
