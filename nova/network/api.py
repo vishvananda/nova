@@ -38,7 +38,7 @@ class API(base.Base):
             Does *not* work for quantum defined nets.
             TODO(JMC)
         """
-        rv = self.db.network_get_by_uuid(context, network_id) 
+        rv = self.db.network_get_by_uuid(context, network_id)
         return dict(rv.iteritems())
 
     def get_floating_ip(self, context, id):

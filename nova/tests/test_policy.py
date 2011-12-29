@@ -67,19 +67,22 @@ class PolicyTestCase(test.TestCase):
         common_policy.Brain.rules = None
         policy._POLICY_PATH = None
         rules = {
-            "true" : [],
-            "example:allowed" : [],
-            "example:denied" : [["false:false"]],
+            "true": [],
+            "example:allowed": [],
+            "example:denied": [["false:false"]],
             "example:get_http": [["http:http://www.example.com"]],
             "example:my_file": [["role:compute_admin"],
                                 ["project_id:%(project_id)s"]],
-            "example:early_and_fail" : [["false:false", "rule:true"]],
-            "example:early_or_success" : [["rule:true"], ["false:false"]],
-            "example:sysadmin_allowed" : [["role:admin"], ["role:sysadmin"]],
+            "example:early_and_fail": [["false:false", "rule:true"]],
+            "example:early_or_success": [["rule:true"], ["false:false"]],
+            "example:sysadmin_allowed": [["role:admin"], ["role:sysadmin"]],
         }
         common_policy.HttpBrain(rules)
         self.context = context.RequestContext('fake', 'fake', roles=['member'])
-        self.admin_context = context.RequestContext('admin', 'fake', roles=['admin'], is_admin=True)
+        self.admin_context = context.RequestContext('admin',
+                                                    'fake',
+                                                    roles=['admin'],
+                                                    is_admin=True)
         self.target = {}
 
     def tearDown(self):
@@ -121,8 +124,8 @@ class PolicyTestCase(test.TestCase):
                           self.context, action, target)
 
     def test_templatized_enforcement(self):
-        target_mine = {'project_id' : 'fake'}
-        target_not_mine = {'project_id' : 'another'}
+        target_mine = {'project_id': 'fake'}
+        target_not_mine = {'project_id': 'another'}
         action = "example:my_file"
         policy.enforce(self.context, action, target_mine)
         self.assertRaises(exception.PolicyNotAllowed, policy.enforce,

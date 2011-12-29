@@ -543,19 +543,19 @@ class API(base.Base):
         could be 'None' or a list of instance dicts depending on if
         we waited for information from the scheduler or not.
         """
-        target = {'project_id' : context.project_id,
-                  'user_id' : context.user_id,
-                  'availability_zone' : availability_zone}
+        target = {'project_id': context.project_id,
+                  'user_id': context.user_id,
+                  'availability_zone': availability_zone}
         policy.enforce(context, "compute:create_instance", target)
-        
+
         if requested_networks:
             for network in requested_networks:
-                # TODO(JMC): I realize this doesn't work for quantum nets yet...
+                # TODO(JMC): I realize this doesn't work for quantum nets yet.
                 (net_id, _i) = network
                 network_obj = self.network_api.get(context, net_id)
                 policy.enforce(context, "compute:attach_network", network_obj)
                 policy.enforce(context, "network:attach_network", network_obj)
-        
+
         if block_device_mapping:
             for bdm in block_device_mapping:
                 volume_obj = self.volume_api.get(context, bdm['volume_id'])

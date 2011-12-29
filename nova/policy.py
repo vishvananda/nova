@@ -31,6 +31,7 @@ flags.DEFINE_string('policy_file', 'policy.json',
 _POLICY_PATH = None
 _POLICY_MTIME = None
 
+
 def _load_if_modified(path):
     global _POLICY_MTIME
     mtime = os.path.getmtime(path)
