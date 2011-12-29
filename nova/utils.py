@@ -1155,8 +1155,9 @@ def read_cached_file(filename, cache_info):
     if cache_info and mtime == cache_info.get('mtime'):
         return cache_info['data']
 
-    with open(filename) as fd:
-        data = fd.read()
+    fd = open(filename)
+    data = fd.read()
+    fd.close()
     cache_info['data'] = data
     cache_info['mtime'] = mtime
     return data
