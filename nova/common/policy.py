@@ -119,7 +119,7 @@ class Brain(object):
 
 
 class HttpBrain(Brain):
-    """A brain that can check external urls a
+    """A brain that can check external urls for policy.
 
     Posts json blobs for target and credentials.
 
@@ -131,9 +131,9 @@ class HttpBrain(Brain):
                 'credentials': json.dumps(cred_dict)}
         post_data = urllib.urlencode(data)
         f = urllib2.urlopen(url, post_data)
-        # NOTE(vish): This is to show how we could do remote requests,
-        #             but some fancier method for response codes should
-        #             probably be defined
+        # NOTE(vish): This is an example of how we could do remote requests,
+        #             but some fancier method using response codes could
+        #             also be defined
         if f.read() == "True":
             return True
         return False
