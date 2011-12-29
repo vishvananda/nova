@@ -366,10 +366,16 @@ DEFINE_string('compute_manager', 'nova.compute.manager.ComputeManager',
 DEFINE_string('console_manager', 'nova.console.manager.ConsoleProxyManager',
               'Manager for console proxy')
 DEFINE_string('instance_dns_manager',
-              'nova.network.instance_dns_driver.InstanceDNSManagerDriver',
+              'nova.network.dns_driver.DNSDriver',
               'DNS Manager for instance IPs')
 DEFINE_string('instance_dns_zone', '',
               'DNS Zone for instance IPs')
+DEFINE_string('floating_ip_dns_manager',
+              'nova.network.dns_driver.DNSDriver',
+              'DNS Manager for floating IPs')
+DEFINE_multistring('floating_ip_dns_zones', '',
+                   'DNS zones for floating IPs.'
+                   'e.g. "example.org"')
 DEFINE_string('network_manager', 'nova.network.manager.VlanManager',
               'Manager for network')
 DEFINE_string('volume_manager', 'nova.volume.manager.VolumeManager',

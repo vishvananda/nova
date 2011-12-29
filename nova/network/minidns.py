@@ -16,6 +16,7 @@ import os
 import shutil
 import tempfile
 
+from nova import exception
 from nova import flags
 
 
@@ -41,7 +42,7 @@ class MiniDNS(object):
             f.close()
 
     def get_zones(self):
-        return ["zone1.example.org", "zone2.example.org", "zone3.example.org"]
+        return flags.FLAGS.floating_ip_dns_zones
 
     def qualify(self, name, zone):
         if zone:
@@ -52,6 +53,10 @@ class MiniDNS(object):
         return qualified
 
     def create_entry(self, name, address, type, dnszone):
+
+        if self.get_entries_by_name(name, dnszone):
+            raise exception.FloatingIpDNSExists(name=name, zone=dnszone)
+
         outfile = open(self.filename, 'a+')
         outfile.write("%s   %s   %s\n" %
             (address, self.qualify(name, dnszone), type))
@@ -69,6 +74,7 @@ class MiniDNS(object):
             return entry
 
     def delete_entry(self, name, dnszone=""):
+        deleted = False
         infile = open(self.filename, 'r')
         outfile = tempfile.NamedTemporaryFile('w', delete=False)
         for line in infile:
@@ -76,9 +82,13 @@ class MiniDNS(object):
             if ((not entry) or
                 entry['name'] != self.qualify(name, dnszone).lower()):
                 outfile.write(line)
+            else:
+                deleted = True
         infile.close()
         outfile.close()
         shutil.move(outfile.name, self.filename)
+        if not deleted:
+            raise exception.NotFound
 
     def rename_entry(self, address, name, dnszone):
         infile = open(self.filename, 'r')
@@ -109,13 +119,15 @@ class MiniDNS(object):
         outfile.close()
         shutil.move(outfile.name, self.filename)
 
-    def get_entries_by_address(self, address, _dnszone=""):
+    def get_entries_by_address(self, address, dnszone=""):
         entries = []
         infile = open(self.filename, 'r')
         for line in infile:
             entry = self.parse_line(line)
             if entry and entry['address'].lower() == address.lower():
-                entries.append(entry['name'])
+                if entry['name'].lower().endswith(dnszone.lower()):
+                    domain_index = entry['name'].lower().find(dnszone.lower())
+                    entries.append(entry['name'][0:domain_index - 1])
         infile.close()
         return entries
 

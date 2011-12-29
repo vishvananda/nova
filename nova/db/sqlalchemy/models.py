@@ -308,8 +308,7 @@ class InstanceActions(BASE, NovaBase):
     """Represents a guest VM's actions and results"""
     __tablename__ = "instance_actions"
     id = Column(Integer, primary_key=True)
-    instance_id = Column(Integer, ForeignKey('instances.id'))
-
+    instance_uuid = Column(String(36), ForeignKey('instances.uuid'))
     action = Column(String(255))
     error = Column(Text)
 
@@ -912,6 +911,17 @@ class SMVolume(BASE, NovaBase):
     vdi_uuid = Column(String(255))
 
 
+class InstanceFault(BASE, NovaBase):
+    __tablename__ = 'instance_faults'
+    id = Column(Integer(), primary_key=True, autoincrement=True)
+    instance_uuid = Column(String(36),
+                           ForeignKey('instances.uuid'),
+                           nullable=False)
+    code = Column(Integer(), nullable=False)
+    message = Column(String(255))
+    details = Column(Text)
+
+
 def register_models():
     """Register Models and create metadata.
 
@@ -927,7 +937,8 @@ def register_models():
               Project, Certificate, ConsolePool, Console, Zone,
               VolumeMetadata, VolumeTypes, VolumeTypeExtraSpecs,
               AgentBuild, InstanceMetadata, InstanceTypeExtraSpecs, Migration,
-              VirtualStorageArray, SMFlavors, SMBackendConf, SMVolume)
+              VirtualStorageArray, SMFlavors, SMBackendConf, SMVolume,
+              InstanceFault)
     engine = create_engine(FLAGS.sql_connection, echo=False)
     for model in models:
         model.metadata.create_all(engine)

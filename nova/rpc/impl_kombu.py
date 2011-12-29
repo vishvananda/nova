@@ -33,6 +33,7 @@ import greenlet
 from nova import context
 from nova import exception
 from nova import flags
+from nova.rpc import common as rpc_common
 from nova.rpc.common import RemoteError, LOG
 
 # Needed for tests
@@ -289,6 +290,27 @@ class FanoutPublisher(Publisher):
                 **options)
 
 
+class NotifyPublisher(TopicPublisher):
+    """Publisher class for 'notify'"""
+
+    def __init__(self, *args, **kwargs):
+        self.durable = kwargs.pop('durable', FLAGS.rabbit_durable_queues)
+        super(NotifyPublisher, self).__init__(*args, **kwargs)
+
+    def reconnect(self, channel):
+        super(NotifyPublisher, self).reconnect(channel)
+
+        # NOTE(jerdfelt): Normally the consumer would create the queue, but
+        # we do this to ensure that messages don't get dropped if the
+        # consumer is started after we do
+        queue = kombu.entity.Queue(channel=channel,
+                exchange=self.exchange,
+                durable=self.durable,
+                name=self.routing_key,
+                routing_key=self.routing_key)
+        queue.declare()
+
+
 class Connection(object):
     """Connection object."""
 
@@ -424,12 +446,12 @@ class Connection(object):
                 pass
             self.consumer_thread = None
 
-    def publisher_send(self, cls, topic, msg):
+    def publisher_send(self, cls, topic, msg, **kwargs):
         """Send to a publisher based on the publisher class"""
         while True:
             publisher = None
             try:
-                publisher = cls(self.channel, topic)
+                publisher = cls(self.channel, topic, **kwargs)
                 publisher.send(msg)
                 return
             except self.connection.connection_errors, e:
@@ -467,6 +489,10 @@ class Connection(object):
     def fanout_send(self, topic, msg):
         """Send a 'fanout' message"""
         self.publisher_send(FanoutPublisher, topic, msg)
+
+    def notify_send(self, topic, msg, **kwargs):
+        """Send a notify message on a topic"""
+        self.publisher_send(NotifyPublisher, topic, msg, **kwargs)
 
     def consume(self, limit=None):
         """Consume from all queues/consumers"""
@@ -512,7 +538,7 @@ ConnectionPool = Pool(
         order_as_stack=True)
 
 
-class ConnectionContext(object):
+class ConnectionContext(rpc_common.Connection):
     """The class that is actually returned to the caller of
     create_connection().  This is a essentially a wrapper around
     Connection that supports 'with' and can return a new Connection or
@@ -568,6 +594,12 @@ class ConnectionContext(object):
     def close(self):
         """Caller is done with this connection."""
         self._done()
+
+    def create_consumer(self, topic, proxy, fanout=False):
+        self.connection.create_consumer(topic, proxy, fanout)
+
+    def consume_in_thread(self):
+        self.connection.consume_in_thread()
 
     def __getattr__(self, key):
         """Proxy all other calls to the Connection instance"""
@@ -764,6 +796,14 @@ def fanout_cast(context, topic, msg):
     _pack_context(msg, context)
     with ConnectionContext() as conn:
         conn.fanout_send(topic, msg)
+
+
+def notify(context, topic, msg):
+    """Sends a notification event on a topic."""
+    LOG.debug(_('Sending notification on %s...'), topic)
+    _pack_context(msg, context)
+    with ConnectionContext() as conn:
+        conn.notify_send(topic, msg, durable=True)
 
 
 def msg_reply(msg_id, reply=None, failure=None, ending=False):

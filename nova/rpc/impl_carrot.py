@@ -42,6 +42,7 @@ import greenlet
 from nova import context
 from nova import exception
 from nova import flags
+from nova.rpc import common as rpc_common
 from nova.rpc.common import RemoteError, LOG
 from nova.testing import fake
 
@@ -51,7 +52,7 @@ eventlet.monkey_patch()
 FLAGS = flags.FLAGS
 
 
-class Connection(carrot_connection.BrokerConnection):
+class Connection(carrot_connection.BrokerConnection, rpc_common.Connection):
     """Connection instance object."""
 
     def __init__(self, *args, **kwargs):
@@ -105,7 +106,7 @@ class Connection(carrot_connection.BrokerConnection):
                 # ignore all errors
                 pass
         self._rpc_consumers = []
-        super(Connection, self).close()
+        carrot_connection.BrokerConnection.close(self)
 
     def consume_in_thread(self):
         """Consumer from all queues/consumers in a greenthread"""
@@ -391,10 +392,11 @@ class TopicPublisher(Publisher):
 
     exchange_type = 'topic'
 
-    def __init__(self, connection=None, topic='broadcast'):
+    def __init__(self, connection=None, topic='broadcast', durable=None):
         self.routing_key = topic
         self.exchange = FLAGS.control_exchange
-        self.durable = FLAGS.rabbit_durable_queues
+        self.durable = FLAGS.rabbit_durable_queues \
+                       if durable is None else durable
         super(TopicPublisher, self).__init__(connection=connection)
 
 
@@ -612,6 +614,17 @@ def fanout_cast(context, topic, msg):
     _pack_context(msg, context)
     with ConnectionPool.item() as conn:
         publisher = FanoutPublisher(topic, connection=conn)
+        publisher.send(msg)
+        publisher.close()
+
+
+def notify(context, topic, msg):
+    """Sends a notification event on a topic."""
+    LOG.debug(_('Sending notification on %s...'), topic)
+    _pack_context(msg, context)
+    with ConnectionPool.item() as conn:
+        publisher = TopicPublisher(connection=conn, topic=topic,
+                                   durable=True)
         publisher.send(msg)
         publisher.close()
 

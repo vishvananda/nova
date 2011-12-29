@@ -28,10 +28,19 @@ from functools import wraps
 import sys
 
 from novaclient import exceptions as novaclient_exceptions
+import webob.exc
 
 from nova import log as logging
 
 LOG = logging.getLogger('nova.exception')
+
+
+class ConvertedException(webob.exc.WSGIHTTPException):
+    def __init__(self, code=0, title="", explanation=""):
+        self.code = code
+        self.title = title
+        self.explanation = explanation
+        super(ConvertedException, self).__init__()
 
 
 def novaclient_converter(f):
@@ -50,6 +59,12 @@ def novaclient_converter(f):
 class ProcessExecutionError(IOError):
     def __init__(self, stdout=None, stderr=None, exit_code=None, cmd=None,
                  description=None):
+        self.exit_code = exit_code
+        self.stderr = stderr
+        self.stdout = stdout
+        self.cmd = cmd
+        self.description = description
+
         if description is None:
             description = _('Unexpected error while running command.')
         if exit_code is None:
@@ -252,6 +267,11 @@ class InvalidCidr(Invalid):
 # msg needs to be constructed when raised.
 class InvalidParameterValue(Invalid):
     message = _("%(err)s")
+
+
+class InstanceInvalidState(Invalid):
+    message = _("Instance %(instance_uuid)s in %(attr)s %(state)s. Cannot "
+                "%(method)s while the instance is in this state.")
 
 
 class InstanceNotRunning(Invalid):
@@ -519,10 +539,6 @@ class FixedIpNotFoundForSpecificInstance(FixedIpNotFound):
     message = _("Instance %(instance_id)s doesn't have fixed ip '%(ip)s'.")
 
 
-class FixedIpNotFoundForVirtualInterface(FixedIpNotFound):
-    message = _("Virtual interface %(vif_id)s has zero associated fixed ips.")
-
-
 class FixedIpNotFoundForHost(FixedIpNotFound):
     message = _("Host %(host)s has zero fixed ips.")
 
@@ -550,6 +566,10 @@ class NoFixedIpsDefined(NotFound):
 
 class FloatingIpNotFound(NotFound):
     message = _("Floating ip not found for id %(id)s.")
+
+
+class FloatingIpDNSExists(Invalid):
+    message = _("The DNS entry %(name)s already exists in zone %(zone)s.")
 
 
 class FloatingIpNotFoundForAddress(FloatingIpNotFound):
