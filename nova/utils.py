@@ -1152,10 +1152,11 @@ def read_cached_file(filename, cache_info):
     last invocation, a cached version will be returned.
     """
     mtime = os.path.getmtime(filename)
-    if cache_info and mtime == cache_info.get('mtime', None):
+    if cache_info and mtime == cache_info.get('mtime'):
         return cache_info['data']
 
-    data = open(filename).read()
+    with open(filename) as fd:
+        data = fd.read()
     cache_info['data'] = data
     cache_info['mtime'] = mtime
     return data
