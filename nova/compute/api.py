@@ -552,20 +552,23 @@ class API(base.Base):
                   'user_id': context.user_id,
                   'availability_zone': availability_zone}
         policy.enforce(context, "compute:create_instance", target)
+        # NOTE(vish): create a partial compute object for attach policy
+        compute_ref = target
 
         if requested_networks:
             for network in requested_networks:
                 # TODO(JMC): I realize this doesn't work for quantum nets yet.
                 (net_id, _i) = network
-                network_obj = self.network_api.get(context, net_id)
-                policy.enforce(context, "compute:attach_network", network_obj)
-                policy.enforce(context, "network:attach_network", network_obj)
+                network_ref = self.network_api.get(context, net_id)
+                policy.enforce(context, "compute:attach_network", compute_ref)
+                policy.enforce(context, "network:attach_network", network_ref)
 
         if block_device_mapping:
             for bdm in block_device_mapping:
-                volume_obj = self.volume_api.get(context, bdm['volume_id'])
-                policy.enforce(context, "compute:attach_volume", volume_obj)
-                policy.enforce(context, "volume:attach_volume", volume_obj)
+                if 'volume_id' in bdm:
+                    volume_ref = self.volume_api.get(context, bdm['volume_id'])
+                    policy.enforce(context, "compute:attach_volume", compute_ref)
+                    policy.enforce(context, "volume:attach_volume", volume_ref)
 
         # We can create the DB entry for the instance here if we're
         # only going to create 1 instance and we're in a single
