@@ -351,6 +351,7 @@ class GenericUtilsTestCase(test.TestCase):
         fake_contents = "lorem ipsum"
         fake_file = self.mox.CreateMockAnything()
         fake_file.read().AndReturn(fake_contents)
+        fake_file.close()
         __builtin__.open(mox.IgnoreArg()).AndReturn(fake_file)
 
         self.mox.ReplayAll()
