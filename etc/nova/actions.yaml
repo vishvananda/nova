@@ -1,0 +1,11 @@
+volumes:
+- 'instance:attach_volume'
+- 'volume:attach_volume'
+- 'volume:create_volume'
+servers:
+- 'instance:run_instance'
+- 'instance:terminate_instance'
+- 'instance:reboot_instance'
+networks:
+- 'network:connect_to_port'
+- 'network:create_cable'

@@ -1,0 +1,11 @@
+{
+    "true" : [],
+    "compute:create_instance": [["role:admin"], ["project_id:%(project_id)s"]],
+    "compute:attach_network":  [["role:admin"], ["project_id:%(project_id)s"]],
+    "compute:attach_volume":   [["role:admin"], ["project_id:%(project_id)s"]],
+    "compute:list_instances":  [["role:admin"], ["project_id:%(project_id)s"]],
+    "compute:get_instance":    [["role:admin"], ["project_id:%(project_id)s"]],
+    "network:attach_network":  [["role:admin"], ["project_id:%(project_id)s"]],
+    "volume:create_volume":    [["role:admin"], ["project_id:%(project_id)s"]],
+    "volume:attach_volume":    [["role:admin"], ["project_id:%(project_id)s"]]
+}

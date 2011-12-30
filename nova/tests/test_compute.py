@@ -111,7 +111,9 @@ class BaseTestCase(test.TestCase):
         self.compute = utils.import_object(FLAGS.compute_manager)
         self.user_id = 'fake'
         self.project_id = 'fake'
-        self.context = context.RequestContext(self.user_id, self.project_id)
+        self.context = context.RequestContext(self.user_id,
+                                              self.project_id,
+                                              roles=['member'])
         test_notifier.NOTIFICATIONS = []
         self.mox = mox.Mox()
         self.total_waits = 0
@@ -876,7 +878,10 @@ class ComputeTestCase(BaseTestCase):
         instance_uuid = instance['uuid']
         self.compute.run_instance(self.context, instance_uuid)
 
-        non_admin_context = context.RequestContext(None, None, is_admin=False)
+        non_admin_context = context.RequestContext(None,
+                                                   None,
+                                                   roles=['member'],
+                                                   is_admin=False)
 
         # decorator should return False (fail) with locked nonadmin context
         self.compute.lock_instance(self.context, instance_uuid)

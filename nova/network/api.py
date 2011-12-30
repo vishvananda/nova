@@ -33,6 +33,14 @@ LOG = logging.getLogger('nova.network')
 class API(base.Base):
     """API for interacting with the network manager."""
 
+    def get(self, context, network_id):
+        """ Returns a network db model.
+            Does *not* work for quantum defined nets.
+            TODO(JMC)
+        """
+        rv = self.db.network_get_by_uuid(context, network_id)
+        return dict(rv.iteritems())
+
     def get_floating_ip(self, context, id):
         return rpc.call(context,
                         FLAGS.network_topic,

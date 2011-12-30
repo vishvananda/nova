@@ -37,6 +37,7 @@ from nova import flags
 import nova.image
 from nova import log as logging
 from nova import network
+from nova import policy
 from nova import quota
 from nova import rpc
 from nova.scheduler import api as scheduler_api
@@ -547,6 +548,27 @@ class API(base.Base):
         could be 'None' or a list of instance dicts depending on if
         we waited for information from the scheduler or not.
         """
+        target = {'project_id': context.project_id,
+                  'user_id': context.user_id,
+                  'availability_zone': availability_zone}
+        policy.enforce(context, "compute:create_instance", target)
+        # NOTE(vish): create a partial instance for attach policy
+        instance = target
+
+        if requested_networks:
+            for network in requested_networks:
+                # TODO(JMC): I realize this doesn't work for quantum nets yet.
+                (net_id, _i) = network
+                network_ref = self.network_api.get(context, net_id)
+                policy.enforce(context, "compute:attach_network", instance)
+                policy.enforce(context, "network:attach_network", network_ref)
+
+        if block_device_mapping:
+            for bdm in block_device_mapping:
+                if 'volume_id' in bdm:
+                    volume_ref = self.volume_api.get(context, bdm['volume_id'])
+                    policy.enforce(context, "compute:attach_volume", instance)
+                    policy.enforce(context, "volume:attach_volume", volume_ref)
 
         # We can create the DB entry for the instance here if we're
         # only going to create 1 instance and we're in a single
