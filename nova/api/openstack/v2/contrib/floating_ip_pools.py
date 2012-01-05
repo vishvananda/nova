@@ -16,12 +16,9 @@
 #    License for the specific language governing permissions and limitations
 #    under the License
 
-import webob
-
 from nova.api.openstack import wsgi
 from nova.api.openstack import xmlutil
 from nova.api.openstack.v2 import extensions
-from nova import exception
 from nova import log as logging
 from nova import network
 
@@ -30,15 +27,16 @@ LOG = logging.getLogger('nova.api.openstack.v2.contrib.floating_ip_poolss')
 
 
 def _translate_floating_ip_view(pool):
-    result = {
-        'id': pool['id'],
+    return {
         'name': pool['name'],
     }
 
 
 def _translate_floating_ip_pools_view(pools):
-    return {'floating_ip_pools': [_translate_floating_ip_view(pool)['name']
-                             for pool in pools]}
+    return {
+        'floating_ip_pools': [_translate_floating_ip_view(pool)
+                              for pool in pools]
+    }
 
 
 class FloatingIPPoolsController(object):
@@ -48,30 +46,14 @@ class FloatingIPPoolsController(object):
         self.network_api = network.API()
         super(FloatingIPPoolsController, self).__init__()
 
-    def show(self, req, id):
-        """Return data about the given pool."""
-        context = req.environ['nova.context']
-
-        try:
-            #pool = self.network_api.get_floating_ip_pool(context, id)
-            pool = {'id': 'nova', 'name': 'nova'}
-        except exception.NotFound:
-            raise webob.exc.HTTPNotFound()
-
-        return _translate_floating_ip_view(pool)
-
     def index(self, req):
         """Return a list of pools."""
         context = req.environ['nova.context']
-
-        #pool = self.network_api.get_floating_ip_pools(context)
-        pools = [{'id': 'nova', 'name': 'nova'}]
-
+        pools = self.network_api.get_floating_ip_pools(context)
         return _translate_floating_ip_pools_view(pools)
 
 
 def make_float_ip(elem):
-    elem.set('id')
     elem.set('name')
 
 
@@ -95,10 +77,6 @@ class FloatingIPPoolsTemplate(xmlutil.TemplateBuilder):
 class FloatingIPPoolSerializer(xmlutil.XMLTemplateSerializer):
     def index(self):
         return FloatingIPPoolsTemplate()
-
-    def default(self):
-        return FloatingIPPoolTemplate()
-
 
 class Floating_ip_pools(extensions.ExtensionDescriptor):
     """Floating IPs support"""

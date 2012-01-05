@@ -39,6 +39,11 @@ class API(base.Base):
                         {'method': 'get_floating_ip',
                          'args': {'id': id}})
 
+    def get_floating_pools(self, context):
+        return rpc.call(context,
+                        FLAGS.network_topic,
+                        {'method': 'get_floating_pools'})
+
     def get_floating_ip_by_address(self, context, address):
         return rpc.call(context,
                         FLAGS.network_topic,
@@ -62,8 +67,8 @@ class API(base.Base):
                         {'method': 'get_vifs_by_instance',
                          'args': {'instance_id': instance_id}})
 
-    def allocate_floating_ip(self, context):
-        """Adds a floating ip to a project. (allocates)"""
+    def allocate_floating_ip(self, context, pool=None):
+        """Adds a floating ip to a project from a pool. (allocates)"""
         # NOTE(vish): We don't know which network host should get the ip
         #             when we allocate, so just send it to any one.  This
         #             will probably need to move into a network supervisor
@@ -71,7 +76,8 @@ class API(base.Base):
         return rpc.call(context,
                         FLAGS.network_topic,
                         {'method': 'allocate_floating_ip',
-                         'args': {'project_id': context.project_id}})
+                         'args': {'project_id': context.project_id,
+                                  'pool': pool}})
 
     def release_floating_ip(self, context, address,
                             affect_auto_assigned=False):

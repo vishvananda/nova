@@ -287,8 +287,8 @@ class FloatingIP(object):
                            'project': context.project_id})
                 raise exception.NotAuthorized()
 
-    def allocate_floating_ip(self, context, project_id):
-        """Gets an floating ip from the pool."""
+    def allocate_floating_ip(self, context, project_id, pool=None):
+        """Gets a floating ip from the pool."""
         # NOTE(tr3buchet): all network hosts in zone now use the same pool
         LOG.debug("QUOTA: %s" % quota.allowed_floating_ips(context, 1))
         if quota.allowed_floating_ips(context, 1) < 1:
@@ -297,9 +297,10 @@ class FloatingIP(object):
                      context.project_id)
             raise exception.QuotaError(_('Address quota exceeded. You cannot '
                                      'allocate any more addresses'))
-        # TODO(vish): add floating ips through manage command
+        pool = pool or FLAGS.default_floating_pool
         return self.db.floating_ip_allocate_address(context,
-                                                    project_id)
+                                                    project_id,
+                                                    pool)
 
     def deallocate_floating_ip(self, context, address,
                                affect_auto_assigned=False):
@@ -424,6 +425,11 @@ class FloatingIP(object):
     def get_floating_ip(self, context, id):
         """Returns a floating IP as a dict"""
         return dict(self.db.floating_ip_get(context, id).iteritems())
+
+    def get_floating_pools(self, context):
+        """Returns list of floating pools"""
+        pools = self.db.floating_ip_get_pools(context)
+        return [dict(pool.iteritems()) for pool in pools]
 
     def get_floating_ip_by_address(self, context, address):
         """Returns a floating IP as a dict"""

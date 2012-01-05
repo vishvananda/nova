@@ -489,7 +489,16 @@ def floating_ip_get(context, id):
 
 
 @require_context
-def floating_ip_allocate_address(context, project_id):
+def floating_ip_get_pools(context):
+    session = get_session()
+    pools = []
+    for name in session.query(models.FloatingIp.pool).distinct():
+        pools.append({'name': name})
+    return pools
+
+
+@require_context
+def floating_ip_allocate_address(context, project_id, pool):
     authorize_project_context(context, project_id)
     session = get_session()
     with session.begin():
@@ -497,6 +506,7 @@ def floating_ip_allocate_address(context, project_id):
                                       session=session, read_deleted="no").\
                                   filter_by(fixed_ip_id=None).\
                                   filter_by(project_id=None).\
+                                  filter_by(pool=pool).\
                                   with_lockmode('update').\
                                   first()
         # NOTE(vish): if with_lockmode isn't supported, as in sqlite,

@@ -86,8 +86,7 @@ class FloatingIPController(object):
         if body and 'pool' in body:
             pool = body['pool']
         try:
-            #address = self.network_api.allocate_floating_ip(context, pool)
-            address = self.network_api.allocate_floating_ip(context)
+            address = self.network_api.allocate_floating_ip(context, pool)
             ip = self.network_api.get_floating_ip_by_address(context, address)
         except rpc.RemoteError as ex:
             # NOTE(tr3buchet) - why does this block exist?
