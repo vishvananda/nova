@@ -431,7 +431,7 @@ def init_host(ip_range=None):
     iptables_manager.apply()
 
 
-def bind_floating_ip(floating_ip, check_exit_code=True):
+def bind_floating_ip(floating_ip, device, check_exit_code=True):
     """Bind ip to public interface."""
     _execute('ip', 'addr', 'add', str(floating_ip) + '/32',
              'dev', FLAGS.public_interface,
@@ -442,10 +442,10 @@ def bind_floating_ip(floating_ip, check_exit_code=True):
                  '-c', 1, run_as_root=True, check_exit_code=False)
 
 
-def unbind_floating_ip(floating_ip):
+def unbind_floating_ip(floating_ip, device):
     """Unbind a public ip from public interface."""
     _execute('ip', 'addr', 'del', str(floating_ip) + '/32',
-             'dev', FLAGS.public_interface, run_as_root=True)
+             'dev', device, run_as_root=True)
 
 
 def ensure_metadata_ip():

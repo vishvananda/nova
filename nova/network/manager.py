@@ -202,7 +202,9 @@ class FloatingIP(object):
                 fixed_address = floating_ip['fixed_ip']['address']
                 # NOTE(vish): The False here is because we ignore the case
                 #             that the ip is already bound.
-                self.driver.bind_floating_ip(floating_ip['address'], False)
+                self.driver.bind_floating_ip(floating_ip['address'],
+                                             floating_ip['interface'],
+                                             False)
                 self.driver.ensure_floating_forward(floating_ip['address'],
                                                     fixed_address)
 
@@ -339,7 +341,6 @@ class FloatingIP(object):
 
         # make sure floating ip isn't already associated
         if floating_ip['fixed_ip_id']:
-            floating_address = floating_ip['address']
             raise exception.FloatingIpAssociated(address=floating_address)
 
         fixed_ip = self.db.fixed_ip_get_by_address(context, fixed_address)
@@ -350,20 +351,22 @@ class FloatingIP(object):
             host = instance['host']
         else:
             host = fixed_ip['network']['host']
-        LOG.info("%s", self.host)
+        interface = floating_ip['interface']
         if host == self.host:
             # i'm the correct host
             self._associate_floating_ip(context, floating_address,
-                                                 fixed_address)
+                                        fixed_address, interface)
         else:
             # send to correct host
             rpc.cast(context,
                      self.db.queue_get_for(context, FLAGS.network_topic, host),
                      {'method': '_associate_floating_ip',
-                      'args': {'floating_address': floating_ip['address'],
-                               'fixed_address': fixed_ip['address']}})
+                      'args': {'floating_address': floating_address,
+                               'fixed_address': fixed_address,
+                               'interface': interface}})
 
-    def _associate_floating_ip(self, context, floating_address, fixed_address):
+    def _associate_floating_ip(self, context, floating_address, fixed_address,
+                               interface):
         """Performs db and driver calls to associate floating ip & fixed ip"""
         # associate floating ip
         self.db.floating_ip_fixed_ip_associate(context,
@@ -371,7 +374,7 @@ class FloatingIP(object):
                                                fixed_address,
                                                self.host)
         # gogo driver time
-        self.driver.bind_floating_ip(floating_address)
+        self.driver.bind_floating_ip(floating_address, interface)
         self.driver.ensure_floating_forward(floating_address, fixed_address)
 
     def disassociate_floating_ip(self, context, address,
@@ -403,23 +406,25 @@ class FloatingIP(object):
             host = instance['host']
         else:
             host = fixed_ip['network']['host']
+        interface = floating_ip['interface']
         if host == self.host:
             # i'm the correct host
-            self._disassociate_floating_ip(context, address)
+            self._disassociate_floating_ip(context, address, interface)
         else:
             # send to correct host
             rpc.cast(context,
                      self.db.queue_get_for(context, FLAGS.network_topic, host),
                      {'method': '_disassociate_floating_ip',
-                      'args': {'address': address}})
+                      'args': {'address': address,
+                               'interface': interface}})
 
-    def _disassociate_floating_ip(self, context, address):
+    def _disassociate_floating_ip(self, context, address, interface):
         """Performs db and driver calls to disassociate floating ip"""
         # disassociate floating ip
         fixed_address = self.db.floating_ip_disassociate(context, address)
 
         # go go driver time
-        self.driver.unbind_floating_ip(address)
+        self.driver.unbind_floating_ip(address, interface)
         self.driver.remove_floating_forward(address, fixed_address)
 
     def get_floating_ip(self, context, id):
