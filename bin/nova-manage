@@ -103,6 +103,7 @@ flags.DECLARE('multi_host', 'nova.network.manager')
 flags.DECLARE('network_size', 'nova.network.manager')
 flags.DECLARE('vlan_start', 'nova.network.manager')
 flags.DECLARE('vpn_start', 'nova.network.manager')
+flags.DECLARE('default_floating_pool', 'nova.network.manager')
 flags.DECLARE('libvirt_type', 'nova.virt.libvirt.connection')
 flags.DEFINE_flag(flags.HelpFlag())
 flags.DEFINE_flag(flags.HelpshortFlag())
@@ -684,14 +685,18 @@ class FixedIpCommands(object):
 class FloatingIpCommands(object):
     """Class for managing floating ip."""
 
-    @args('--ip_range', dest="range", metavar='<range>', help='IP range')
-    def create(self, range):
+    @args('--ip_range', dest="ip_range", metavar='<range>', help='IP range')
+    @args('--pool', dest="pool", metavar='<pool>', help='Optional pool')
+    def create(self, ip_range, pool=None):
         """Creates floating ips for zone by range"""
-        addresses = netaddr.IPNetwork(range)
+        addresses = netaddr.IPNetwork(ip_range)
         admin_context = context.get_admin_context()
+        if not pool:
+            pool = FLAGS.default_floating_pool
         for address in addresses.iter_hosts():
             db.floating_ip_create(admin_context,
-                                  {'address': str(address)})
+                                  {'address': str(address),
+                                   'pool': pool})
 
     @args('--ip_range', dest="ip_range", metavar='<range>', help='IP range')
     def delete(self, ip_range):
