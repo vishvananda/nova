@@ -39,7 +39,7 @@ class API(base.Base):
                         {'method': 'get_floating_ip',
                          'args': {'id': id}})
 
-    def get_floating_pools(self, context):
+    def get_floating_ip_pools(self, context):
         return rpc.call(context,
                         FLAGS.network_topic,
                         {'method': 'get_floating_pools'})
