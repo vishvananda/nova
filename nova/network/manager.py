@@ -93,6 +93,8 @@ flags.DEFINE_integer('network_size', 256,
                         'Number of addresses in each private subnet')
 flags.DEFINE_string('floating_range', '4.4.4.0/24',
                     'Floating IP address block')
+flags.DEFINE_string('default_floating_pool', 'nova',
+                    'Default pool for floating ips')
 flags.DEFINE_string('fixed_range', '10.0.0.0/8', 'Fixed IP address block')
 flags.DEFINE_string('fixed_range_v6', 'fd00::/48', 'Fixed IPv6 address block')
 flags.DEFINE_string('gateway', None, 'Default IPv4 gateway')

@@ -711,6 +711,8 @@ class FloatingIp(BASE, NovaBase):
     project_id = Column(String(255))
     host = Column(String(255))  # , ForeignKey('hosts.id'))
     auto_assigned = Column(Boolean, default=False, nullable=False)
+    pool = Column(String(255))
+    interface = Column(String(255))
 
 
 class AuthToken(BASE, NovaBase):
