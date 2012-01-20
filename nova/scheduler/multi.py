@@ -27,10 +27,11 @@ from nova.scheduler import driver
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string('compute_scheduler_driver',
-                    'nova.scheduler.chance.ChanceScheduler',
+                    'nova.scheduler.'
+                    'distributed_scheduler.DistributedScheduler',
                     'Driver to use for scheduling compute calls')
 flags.DEFINE_string('volume_scheduler_driver',
-                    'nova.scheduler.chance.ChanceScheduler',
+                    'nova.scheduler.simple.SimpleScheduler',
                     'Driver to use for scheduling volume calls')
 
 
