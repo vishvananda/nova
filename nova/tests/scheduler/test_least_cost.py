@@ -19,6 +19,7 @@ from nova import context
 from nova.scheduler import least_cost
 from nova import test
 from nova.tests.scheduler import fakes
+from nova import utils
 
 
 def offset(hostinfo, options):
@@ -34,6 +35,11 @@ class LeastCostTestCase(test.TestCase):
         super(LeastCostTestCase, self).setUp()
         self.flags(reserved_host_disk_mb=0, reserved_host_memory_mb=0)
         self.host_manager = fakes.FakeHostManager()
+
+        def fake_service_is_up(service):
+            return True
+
+        self.stubs.Set(utils, 'service_is_up', fake_service_is_up)
 
     def tearDown(self):
         super(LeastCostTestCase, self).tearDown()

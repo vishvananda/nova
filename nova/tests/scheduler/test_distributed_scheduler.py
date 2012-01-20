@@ -27,6 +27,7 @@ from nova.scheduler import least_cost
 from nova.scheduler import host_manager
 from nova import test
 from nova.tests.scheduler import fakes
+from nova import utils
 
 
 def fake_call_zone_method(context, method, specs, zones):
@@ -72,6 +73,14 @@ def fake_filter_hosts(hosts, filter_properties):
 
 class DistributedSchedulerTestCase(test.TestCase):
     """Test case for Distributed Scheduler."""
+
+    def setUp(self):
+        super(DistributedSchedulerTestCase, self).setUp()
+
+        def fake_service_is_up(service):
+            return True
+
+        self.stubs.Set(utils, 'service_is_up', fake_service_is_up)
 
     def test_adjust_child_weights(self):
         """Make sure the weights returned by child zones are
