@@ -1076,6 +1076,8 @@ class ComputeManager(manager.SchedulerDependentManager):
                 migration_ref.instance_uuid)
 
         network_info = self._get_instance_nw_info(context, instance_ref)
+        # FIX!!: make not delete _resize
+        # may be good to add driver.revert_resize method
         self.driver.destroy(instance_ref, network_info)
         topic = self.db.queue_get_for(context, FLAGS.compute_topic,
                 migration_ref['source_compute'])

@@ -62,6 +62,7 @@ from nova import exception
 from nova import flags
 import nova.image
 from nova import log as logging
+from nova import network
 from nova import utils
 from nova.virt.disk import api as disk
 from nova.virt import driver
@@ -177,6 +178,7 @@ class LibvirtConnection(driver.ComputeDriver):
 
         fw_class = utils.import_class(FLAGS.firewall_driver)
         self.firewall_driver = fw_class(get_connection=self._get_connection)
+        self.network_api = network.API()
         self.vif_driver = utils.import_object(FLAGS.libvirt_vif_driver)
         self.volume_drivers = {}
         for driver_str in FLAGS.libvirt_volume_drivers:
@@ -303,8 +305,14 @@ class LibvirtConnection(driver.ComputeDriver):
             self.vif_driver.unplug(instance, network, mapping)
 
     def _destroy(self, instance, network_info, block_device_info=None,
-                 cleanup=True):
+                 cleanup=True, cleanup_resize=True):
         instance_name = instance['name']
+
+        # cleanup_resize indicates cleanup <instance>_resize dir.
+        # if not cleanup, keep <instance> dir (ie. confirm_resize)
+        if cleanup_resize and not cleanup:
+            self._cleanup_resize(instance)
+            return True
 
         try:
             virt_dom = self._lookup_by_name(instance_name)
@@ -389,6 +397,9 @@ class LibvirtConnection(driver.ComputeDriver):
         if cleanup:
             self._cleanup(instance)
 
+        if cleanup_resize:
+            self._cleanup_resize(instance)
+
         return True
 
     def destroy(self, instance, network_info, block_device_info=None):
@@ -402,6 +413,12 @@ class LibvirtConnection(driver.ComputeDriver):
                 ' %(target)s') % locals())
         if FLAGS.libvirt_type == 'lxc':
             disk.destroy_container(self.container)
+        if os.path.exists(target):
+            shutil.rmtree(target)
+
+    def _cleanup_resize(self, instance):
+        target = os.path.join(FLAGS.instances_path,
+                              instance['name'] + "_resize")
         if os.path.exists(target):
             shutil.rmtree(target)
 
@@ -1953,6 +1970,155 @@ class LibvirtConnection(driver.ComputeDriver):
         """Sets the specified host's ability to accept new instances."""
         pass
 
+    @exception.wrap_exception()
+    def migrate_disk_and_power_off(self, context, instance, dest, instance_type_ref):
+        LOG.debug(_("Instance %s: Starting migrate_disk_and_power_off"),
+                   instance['name'])
+        disk_info_text = self.get_instance_disk_info(instance['name'])
+        disk_info = utils.loads(disk_info_text)
+        network_info = self._get_instance_nw_info(context, instance['name'])
+
+        self._destroy(instance, network_info, cleanup=False,
+                      cleanup_resize=False)
+
+        # copy disks to destination
+        # if disk type is qcow2, convert to raw then send to dest.
+        # rename instance dir to +_resize at first for using
+        # shared storage for instance dir (eg. NFS).
+        same_host = (dest == self.get_host_ip_addr())
+        inst_base = "%s/%s" % (FLAGS.instances_path, instance['name'])
+        inst_base_resize = inst_base + "_resize"
+        try:
+            utils.execute('mv', inst_base, inst_base_resize)
+            if same_host:
+                utils.execute('mkdir', '-p', inst_base)
+            else:
+                utils.execute('ssh', dest, 'mkdir', '-p', inst_base)
+            for info in disk_info:
+                # assume inst_base == dirname(info['path'])
+                to_path = "%s:%s" % (dest, info['path'])
+                fname = os.path.basename(info['path'])
+                from_path = os.path.join(inst_base_resize, fname)
+                if info['type'] == 'qcow2':
+                    tmp_path = from_path + "_rbase"
+                    utils.execute('qemu-img', 'convert', '-f', 'qcow2',
+                              '-O', 'raw', from_path, tmp_path)
+                    if same_host:
+                        utils.execute('mv', tmp_path, info['path'])
+                    else:
+                        utils.execute('scp', tmp_path, to_path)
+                        utils.execute('rm', '-f', tmp_path)
+                else:  # raw
+                    if same_host:
+                        utils.execute('cp', from_path, info['path'])
+                    else:
+                        utils.execute('scp', from_path, to_path)
+        except Exception, e:
+            try:
+                if os.path.exists(inst_base_resize):
+                    utils.execute('rm', '-rf', inst_base)
+                    utils.execute('mv', inst_base_resize, inst_base)
+                    utils.execute('ssh', dest, 'rm', '-rf', inst_base)
+            except:
+                pass
+            raise e
+
+        return disk_info_text
+
+    def _wait_for_running(self, instance_name):
+        try:
+            state = self.get_info(instance_name)['state']
+        except exception.NotFound:
+            msg = _("During wait running, %s disappeared.") % instance_name
+            LOG.error(msg)
+            raise utils.LoopingCallDone
+
+        if state == power_state.RUNNING:
+            msg = _("Instance %s running successfully.") % instance_name
+            LOG.info(msg)
+            raise utils.LoopingCallDone
+
+    @exception.wrap_exception()
+    def finish_migration(self, context, migration, instance, disk_info,
+                         network_info, image_meta, resize_instance):
+        LOG.debug(_("Instance %s: Starting finish_migration"),
+                   instance['name'])
+
+        # resize disks. only "disk" and "disk.local" are necessary.
+        disk_info = utils.loads(disk_info)
+        for info in disk_info:
+            fname = os.path.basename(info['path'])
+            if fname == 'disk':
+                disk.extend(info['path'],
+                            instance['root_gb'] * 1024 * 1024 * 1024)
+            elif fname == 'disk.local':
+                disk.extend(info['path'],
+                            instance['ephemeral_gb'] * 1024 * 1024 * 1024)
+            if FLAGS.use_cow_images:
+                # back to qcow2 (no backing_file though) so that snapshot
+                # will be available
+                path_qcow = info['path'] + '_qcow'
+                utils.execute('qemu-img', 'convert', '-f', 'raw',
+                        '-O', 'qcow2', info['path'], path_qcow)
+                utils.execute('mv', path_qcow, info['path'])
+
+        xml = self.to_xml(instance, network_info)
+
+        self.plug_vifs(instance, network_info)
+        self.firewall_driver.setup_basic_filtering(instance, network_info)
+        self.firewall_driver.prepare_instance_filter(instance, network_info)
+        # assume _create_image do nothing if a target file exists.
+        # TODO(oda): injecting files is not necessary
+        self._create_image(context, instance, xml,
+                                      network_info=network_info,
+                                      block_device_info=None)
+
+        domain = self._create_new_domain(xml)
+
+        self.firewall_driver.apply_instance_filter(instance, network_info)
+
+        timer = utils.LoopingCall(self._wait_for_running, instance['name'])
+        return timer.start(interval=0.5, now=True)
+
+    @exception.wrap_exception()
+    def finish_revert_migration(self, instance):
+        LOG.debug(_("Instance %s: Starting finish_revert_migration"),
+                   instance['name'])
+        # FIX: context or network_info neccessary !!
+        network_info = self._get_instance_nw_info(\
+                               nova_context.get_admin_context(), instance)
+
+        inst_base = "%s/%s" % (FLAGS.instances_path, instance['name'])
+        inst_base_resize = inst_base + "_resize"
+        utils.execute('mv', inst_base_resize, inst_base)
+
+        xml_path = os.path.join(inst_base, 'libvirt.xml')
+        xml = open(xml_path).read()
+
+        self.plug_vifs(instance, network_info)
+        self.firewall_driver.setup_basic_filtering(instance, network_info)
+        self.firewall_driver.prepare_instance_filter(instance, network_info)
+        # images already exist
+        domain = self._create_new_domain(xml)
+        self.firewall_driver.apply_instance_filter(instance, network_info)
+
+        timer = utils.LoopingCall(self._wait_for_running, instance['name'])
+        return timer.start(interval=0.5, now=True)
+
+    def _get_instance_nw_info(self, context, instance):
+        """Get a list of dictionaries of network data of an instance.
+        Returns an empty list if stub_network flag is set."""
+        # TODO:(nati)_this code is copy from compute/manager.py.
+        #To check stub_network shoud go to the  network api code.
+        network_info = []
+        if not FLAGS.stub_network:
+            network_info = self.network_api.get_instance_nw_info(context,
+                                                                 instance)
+        return network_info
+
+    def confirm_migration(self, migration, instance, network_info):
+        """Confirms a resize, destroying the source VM"""
+        self._cleanup_resize(instance)
 
 class HostState(object):
     """Manages information about the compute node through libvirt"""
