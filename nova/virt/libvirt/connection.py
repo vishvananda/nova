@@ -1976,7 +1976,7 @@ class LibvirtConnection(driver.ComputeDriver):
                    instance['name'])
         disk_info_text = self.get_instance_disk_info(instance['name'])
         disk_info = utils.loads(disk_info_text)
-        network_info = self._get_instance_nw_info(context, instance['name'])
+        network_info = self._get_instance_nw_info(context, instance)
 
         self._destroy(instance, network_info, cleanup=False,
                       cleanup_resize=False)
