@@ -1971,12 +1971,12 @@ class LibvirtConnection(driver.ComputeDriver):
         pass
 
     @exception.wrap_exception()
-    def migrate_disk_and_power_off(self, context, instance, dest, instance_type_ref):
+    def migrate_disk_and_power_off(self, context, instance, dest,
+                                   instance_type, network_info):
         LOG.debug(_("Instance %s: Starting migrate_disk_and_power_off"),
                    instance['name'])
         disk_info_text = self.get_instance_disk_info(instance['name'])
         disk_info = utils.loads(disk_info_text)
-        network_info = self._get_instance_nw_info(context, instance)
 
         self._destroy(instance, network_info, cleanup=False,
                       cleanup_resize=False)
@@ -2081,12 +2081,10 @@ class LibvirtConnection(driver.ComputeDriver):
         return timer.start(interval=0.5, now=True)
 
     @exception.wrap_exception()
-    def finish_revert_migration(self, instance):
+    def finish_revert_migration(self, instance, network_info):
         LOG.debug(_("Instance %s: Starting finish_revert_migration"),
                    instance['name'])
         # FIX: context or network_info neccessary !!
-        network_info = self._get_instance_nw_info(\
-                               nova_context.get_admin_context(), instance)
 
         inst_base = "%s/%s" % (FLAGS.instances_path, instance['name'])
         inst_base_resize = inst_base + "_resize"
@@ -2104,17 +2102,6 @@ class LibvirtConnection(driver.ComputeDriver):
 
         timer = utils.LoopingCall(self._wait_for_running, instance['name'])
         return timer.start(interval=0.5, now=True)
-
-    def _get_instance_nw_info(self, context, instance):
-        """Get a list of dictionaries of network data of an instance.
-        Returns an empty list if stub_network flag is set."""
-        # TODO:(nati)_this code is copy from compute/manager.py.
-        #To check stub_network shoud go to the  network api code.
-        network_info = []
-        if not FLAGS.stub_network:
-            network_info = self.network_api.get_instance_nw_info(context,
-                                                                 instance)
-        return network_info
 
     def confirm_migration(self, migration, instance, network_info):
         """Confirms a resize, destroying the source VM"""
