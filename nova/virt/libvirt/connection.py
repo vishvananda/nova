@@ -178,7 +178,6 @@ class LibvirtConnection(driver.ComputeDriver):
 
         fw_class = utils.import_class(FLAGS.firewall_driver)
         self.firewall_driver = fw_class(get_connection=self._get_connection)
-        self.network_api = network.API()
         self.vif_driver = utils.import_object(FLAGS.libvirt_vif_driver)
         self.volume_drivers = {}
         for driver_str in FLAGS.libvirt_volume_drivers:
