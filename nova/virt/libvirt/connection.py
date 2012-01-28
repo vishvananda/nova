@@ -420,6 +420,32 @@ class LibvirtConnection(driver.ComputeDriver):
         if os.path.exists(target):
             shutil.rmtree(target)
 
+    @property
+    def initiator(self):
+        if not hasattr(self, '_initiator'):
+            # NOTE(vish) openiscsi stores initiator name in a file that
+            #            needs root permission to read.
+            try:
+                out, _err = libvirt_utils.execute([
+                        'grep', 'InitiatorName=',
+                        '/etc/iscsi/initiatorname.iscsi'
+                    ], run_as_root=True)
+            except exception.ProcessExecutionError:
+                LOG.warn(_('Could not determine iscsi initiator name'))
+                return None
+            _key, _sep, value = out.strip().partition("=")
+            if not value:
+                LOG.warn(_('Could not determine iscsi initiator name'))
+                return None
+            self._initiator = value
+        return self._initiator
+
+    def get_volume_connector(self, _instance):
+        return {
+            'ip': FLAGS.my_ip,
+            'initiator': self.initiator,
+        }
+
     def volume_driver_method(self, method_name, connection_info,
                              *args, **kwargs):
         driver_type = connection_info.get('driver_volume_type')
@@ -718,11 +744,11 @@ class LibvirtConnection(driver.ComputeDriver):
 
         if virsh_output.startswith('/dev/'):
             LOG.info(_("cool, it's a device"))
-            out, err = utils.execute('dd',
-                                     "if=%s" % virsh_output,
-                                     'iflag=nonblock',
-                                     run_as_root=True,
-                                     check_exit_code=False)
+            out, err = libvirt_utils.execute('dd',
+                                             'if=%s' % virsh_output,
+                                             'iflag=nonblock',
+                                             run_as_root=True,
+                                             check_exit_code=False)
             return out
         else:
             return ''
@@ -742,8 +768,9 @@ class LibvirtConnection(driver.ComputeDriver):
 
         if FLAGS.libvirt_type == 'xen':
             # Xen is special
-            virsh_output = utils.execute('virsh', 'ttyconsole',
-                                         instance['name'])
+            virsh_output = libvirt_utils.execute('virsh',
+                                                 'ttyconsole',
+                                                 instance['name'])
             data = self._flush_xen_console(virsh_output)
             fpath = self._append_to_file(data, console_log)
         elif FLAGS.libvirt_type == 'lxc':
@@ -1895,7 +1922,7 @@ class LibvirtConnection(driver.ComputeDriver):
                 backing_file = ""
                 virt_size = 0
             else:
-                out, err = utils.execute('qemu-img', 'info', path)
+                out, err = libvirt_utils.execute('qemu-img', 'info', path)
 
                 # virtual size:
                 size = [i.split('(')[1].split()[0] for i in out.split('\n')

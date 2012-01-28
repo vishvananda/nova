@@ -605,3 +605,17 @@ class ComputeDriver(object):
         Note that this function takes an instance ID.
         """
         raise NotImplementedError()
+
+    def get_volume_connector(self, instance):
+        """
+        Get connector information for the instance for attaching to volumes.
+
+        Connector information is a dictionary representing the ip of the
+        machine that will be making the connection and and the name of the
+        iscsi initiator as follows:
+            {
+                'ip': ip,
+                'initiator': initiator,
+            }
+        """
+        raise NotImplementedError()

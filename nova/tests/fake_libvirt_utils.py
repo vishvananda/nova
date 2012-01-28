@@ -21,6 +21,9 @@ disk_sizes = {}
 disk_backing_files = {}
 
 
+def execute(*args, **kwargs):
+    return 'fake output', None
+
 def create_image(disk_format, path, size):
     pass
 

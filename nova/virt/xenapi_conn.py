@@ -348,6 +348,24 @@ class XenAPIConnection(driver.ComputeDriver):
         """Return link to instance's ajax console"""
         return self._vmops.get_vnc_console(instance)
 
+    @property
+    def initiator(self):
+        if not hasattr(self, '_initiator'):
+            stats = self.get_host_stats(update=True)
+            try:
+                self._initiator = stats['host_other-config']['iscsi_iqn']
+            except (TypeError, KeyError):
+                LOG.warn(_('Could not determine iscsi initiator name'))
+                return None
+        return self._initiator
+
+    def get_volume_connector(self, _instance):
+        """Return volume connector information"""
+        return {
+            'ip': self.get_host_ip_addr(),
+            'initiator': self.initiator
+        }
+
     @staticmethod
     def get_host_ip_addr():
         xs_url = urlparse.urlparse(FLAGS.xenapi_connection_url)

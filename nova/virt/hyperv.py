@@ -474,6 +474,15 @@ class HyperVConnection(driver.ComputeDriver):
             LOG.error(msg)
             raise Exception(msg)
 
+    def get_volume_connector(self, _instance):
+        """Return volume connector information"""
+        # TODO(vish): When volume attaching is supported, return the
+        #             proper initiator iqn.
+        return {
+            'ip': FLAGS.my_ip,
+            'initiator': None
+        }
+
     def attach_volume(self, connection_info, instance_name, mountpoint):
         vm = self._lookup(instance_name)
         if vm is None:
