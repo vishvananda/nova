@@ -1,0 +1,506 @@
+diff -Naurp nova.orig/Authors nova/Authors
+--- nova.orig/Authors	2012-02-14 12:09:51.913338628 -0500
++++ nova/Authors	2012-02-14 12:10:09.901337405 -0500
+@@ -138,6 +138,7 @@ Renuka Apte <renuka.apte@citrix.com>
+ Ricardo Carrillo Cruz <emaildericky@gmail.com>
+ Rick Clark <rick@openstack.org>
+ Rick Harris <rconradharris@gmail.com>
++Robie Basak <robie.basak@canonical.com>
+ Rob Kost <kost@isi.edu>
+ Russell Bryant <rbryant@redhat.com>
+ Ryan Lane <rlane@wikimedia.org>
+diff -Naurp nova.orig/nova/tests/test_libvirt.py nova/nova/tests/test_libvirt.py
+--- nova.orig/nova/tests/test_libvirt.py	2012-02-14 12:09:51.997338631 -0500
++++ nova/nova/tests/test_libvirt.py	2012-02-14 12:10:09.905337571 -0500
+@@ -761,7 +761,7 @@ class LibvirtConnTestCase(test.TestCase)
+             (lambda t: _ipv4_like(t.findall(parameter)[1].get('value'),
+                                   '192.168.*.1'), True),
+             (lambda t: t.find('./devices/serial/source').get(
+-                'path').split('/')[1], 'console.log'),
++                'path').split('/')[1], 'console.fifo'),
+             (lambda t: t.find('./memory').text, '2097152')]
+         if rescue:
+             common_checks += [
+@@ -1774,6 +1774,56 @@ class NWFilterTestCase(test.TestCase):
+         db.instance_destroy(admin_ctxt, instance_ref['id'])
+ 
+ 
++class ConsoleLoggerTestCase(test.TestCase):
++    def setUp(self):
++        super(ConsoleLoggerTestCase, self).setUp()
++        eventlet.monkey_patch()
++        self.directory_path = tempfile.mkdtemp()
++        self.ringbuffer_path = os.path.join(self.directory_path, 'ring')
++        self.fifo_path = os.path.join(self.directory_path, 'fifo')
++        os.mkfifo(self.fifo_path)
++        self.console_logger = connection.ConsoleLogger(self.fifo_path,
++                                                       self.ringbuffer_path)
++        eventlet.sleep(0)
++
++    def testWriteBytes(self, reopen_writer=False, reopen_reader=False):
++        fd = os.open(self.fifo_path, os.O_WRONLY)
++        os.write(fd, '0')
++        eventlet.sleep(0)
++        eventlet.sleep(0)
++        self.assertEquals(self.console_logger.ringbuffer.peek(), '0')
++        if reopen_writer:
++            os.close(fd)
++            fd = os.open(self.fifo_path, os.O_WRONLY)
++        if reopen_reader:
++            self.console_logger.close()
++            self.console_logger = connection.ConsoleLogger(
++                    self.fifo_path,
++                    self.ringbuffer_path)
++            eventlet.sleep(0)
++        os.write(fd, '1')
++        eventlet.sleep(0)
++        eventlet.sleep(0)
++        self.assertEquals(self.console_logger.ringbuffer.peek(), '01')
++        os.close(fd)
++
++    def testReopenWriter(self):
++        self.testWriteBytes(reopen_writer=True)
++
++    def testReopenReader(self):
++        self.testWriteBytes(reopen_reader=True)
++
++    def testReopenBoth(self):
++        self.testWriteBytes(reopen_writer=True, reopen_reader=True)
++
++    def tearDown(self):
++        super(ConsoleLoggerTestCase, self).tearDown()
++        if self.console_logger:
++            self.console_logger.close()
++        os.unlink(self.ringbuffer_path)
++        os.unlink(self.fifo_path)
++        os.rmdir(self.directory_path)
++
+ class LibvirtUtilsTestCase(test.TestCase):
+     def test_get_iscsi_initiator(self):
+         self.mox.StubOutWithMock(utils, 'execute')
+diff -Naurp nova.orig/nova/tests/test_utils.py nova/nova/tests/test_utils.py
+--- nova.orig/nova/tests/test_utils.py	2012-02-14 12:09:51.997338631 -0500
++++ nova/nova/tests/test_utils.py	2012-02-14 12:10:09.905337571 -0500
+@@ -17,11 +17,14 @@
+ import __builtin__
+ import mox
+ import datetime
++import itertools
+ import hashlib
+ import os
+ import StringIO
+ import tempfile
+ 
++import nose
++
+ import nova
+ from nova import exception
+ from nova import flags
+@@ -700,3 +703,56 @@ class DeprecationTest(test.TestCase):
+         h1 = utils.hash_file(flo)
+         h2 = hashlib.sha1(data).hexdigest()
+         self.assertEquals(h1, h2)
++
++class RingBufferTestCase(test.TestCase):
++    """Unit test for utils.RingBuffer()."""
++    def setUp(self):
++        super(RingBufferTestCase, self).setUp()
++        self.f = tempfile.NamedTemporaryFile()
++        self.r = utils.RingBuffer(self.f.name, max_size=4)
++
++    def tearDown(self):
++        super(RingBufferTestCase, self).tearDown()
++        self.r.close()
++        self.f.close()
++
++    def testEmpty(self):
++        self.assertEquals(self.r.peek(), '')
++
++    def testReOpen(self):
++        self.r.write('1')
++        self.r.close()
++        self.r = utils.RingBuffer(self.f.name, max_size=4)
++        self.assertEquals(self.r.peek(), '1')
++
++
++def testPermutations():
++    """Test various permutations of writing to a RingBuffer.
++
++    Try all permutations of writing [0,5) bytes three times to a RingBuffer
++    of size 4. This makes use of nose's test generator capability so cannot
++    be a subclass of test.TestCase.
++
++    """
++    def check_buffer(r, expected):
++        nose.tools.eq_(r.peek(), expected)
++
++    SIZE = 4
++    for sequence in itertools.product(range(5), range(5), range(5)):
++        f = tempfile.NamedTemporaryFile()
++        r = utils.RingBuffer(f.name, max_size=SIZE)
++        source = itertools.count()
++        expected = ''
++
++        def next_n(n):
++            return ''.join(str(next(source)) for x in range(n))
++        for entry in sequence:
++            to_insert = next_n(entry)
++            expected += to_insert
++            expected = expected[max(0, len(expected) - SIZE):]
++            r.write(to_insert)
++            yield check_buffer, r, expected
++        r.close()
++        f.close()
++
++
+diff -Naurp nova.orig/nova/utils.py nova/nova/utils.py
+--- nova.orig/nova/utils.py	2012-02-14 12:09:52.001338633 -0500
++++ nova/nova/utils.py	2012-02-14 12:10:09.905337571 -0500
+@@ -27,11 +27,13 @@ import inspect
+ import json
+ import lockfile
+ import os
++import os.path
+ import pyclbr
+ import random
+ import re
+ import shlex
+ import socket
++import stat
+ import struct
+ import sys
+ import time
+@@ -52,6 +54,7 @@ from nova import log as logging
+ from nova.openstack.common import cfg
+ 
+ 
++BITS_PER_BYTE = 8
+ LOG = logging.getLogger("nova.utils")
+ ISO_TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+ PERFECT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S.%f"
+@@ -1420,3 +1423,133 @@ def read_file_as_root(file_path):
+         return out
+     except exception.ProcessExecutionError:
+         raise exception.FileNotFound(file_path=file_path)
++
++class RingBuffer(object):
++    """Generic userspace on-disk ringbuffer implementation."""
++    _header_max_int = (2 ** (struct.calcsize('I') * BITS_PER_BYTE)) - 1
++    _header_format = 'II'
++    _header_size = struct.calcsize(_header_format)
++
++    def __init__(self, backing_file, max_size=65536):
++        # We need one extra byte as the buffer is kept with
++        # one byte free to avoid the head==tail full/empty
++        # problem
++        max_size += 1
++
++        if not 0 < max_size <= RingBuffer._header_max_int:
++            raise ValueError(_('RingBuffer size out of range'))
++        had_already_existed = os.path.exists(backing_file)
++        self.f = self._open(backing_file)
++        if had_already_existed:
++            file_size = os.fstat(self.f.fileno()).st_size
++            if file_size:
++                current_size = file_size - self._header_size
++                if not 0 < current_size <= RingBuffer._header_max_int:
++                    self.f.close()
++                    raise ValueError(_('Disk RingBuffer size out of range'))
++                self.max_size = current_size
++
++                # If the file doesn't contain a header, assume it is corrupt
++                # and recreate
++                if file_size < self._header_size:
++                    self._write_header(0, 0)  # initialise to empty
++
++                #if head or tail point beyond the file then bomb out
++                head, tail = self._read_header()
++                if head >= current_size or tail >= current_size:
++                    self.f.close()
++                    raise ValueError(_('RingBuffer %s is corrupt') %
++                                     backing_file)
++            else:
++                # File is zero bytes: treat as new file
++                self.max_size = max_size
++                self._initialise_empty_file()
++        else:
++            self.max_size = max_size
++            self._initialise_empty_file()
++
++    def _initialise_empty_file(self):
++        os.ftruncate(self.f.fileno(), self.max_size + self._header_size)
++        self._write_header(0, 0)  # head == tail means no data
++
++    @staticmethod
++    def _open(filename):
++        """Open a file without truncating it for both reading and writing in
++        binary mode."""
++        # Built-in open() cannot open in read/write mode without truncating.
++        fd = os.open(filename, os.O_RDWR | os.O_CREAT, 0666)
++        return os.fdopen(fd, 'w+')
++
++    def _read_header(self):
++        self.f.seek(0)
++        return struct.unpack(self._header_format,
++                             self.f.read(self._header_size))
++
++    def _write_header(self, head, tail):
++        self.f.seek(0)
++        self.f.write(struct.pack(self._header_format, head, tail))
++
++    def _seek(self, pos):
++        """Seek to pos in data (ignoring header)."""
++        self.f.seek(self._header_size + pos)
++
++    def _read_slice(self, start, end):
++        if start == end:
++            return ''
++
++        self._seek(start)
++        return self.f.read(end - start)
++
++    def _write_slice(self, pos, data):
++        self._seek(pos)
++        self.f.write(data)
++
++    def peek(self):
++        """Read the entire ringbuffer without consuming it."""
++        head, tail = self._read_header()
++        if head < tail:
++            # Wraps around
++            before_wrap = self._read_slice(tail, self.max_size)
++            after_wrap = self._read_slice(0, head)
++            return before_wrap + after_wrap
++        else:
++            # Just from here to head
++            return self._read_slice(tail, head)
++
++    def write(self, data):
++        """Write some amount of data to the ringbuffer, discarding the oldest
++        data as max_size is exceeded."""
++        head, tail = self._read_header()
++        while data:
++            # Amount of data to be written on this pass
++            len_to_write = min(len(data), self.max_size - head)
++
++            # Where head will be after this write
++            new_head = head + len_to_write
++
++            # In the next comparison, new_head may be self.max_size which is
++            # logically the same point as tail == 0 and must still be within
++            # the range tested.
++            unwrapped_tail = tail if tail else self.max_size
++
++            if head < unwrapped_tail <= new_head:
++                # Write will go past tail so tail needs to be pushed back
++                tail = new_head + 1  # one past head to indicate full
++                tail %= self.max_size
++                self._write_header(head, tail)
++
++            # Write the data
++            self._write_slice(head, data[:len_to_write])
++            data = data[len_to_write:]  # data now left
++
++            # Push head back
++            head = new_head
++            head %= self.max_size
++            self._write_header(head, tail)
++
++    def flush(self):
++        self.f.flush()
++
++    def close(self):
++        self.f.close()
++
+diff -Naurp nova.orig/nova/virt/libvirt/connection.py nova/nova/virt/libvirt/connection.py
+--- nova.orig/nova/virt/libvirt/connection.py	2012-02-14 12:09:52.001338633 -0500
++++ nova/nova/virt/libvirt/connection.py	2012-02-14 12:11:04.853340374 -0500
+@@ -39,15 +39,19 @@ Supports KVM, LXC, QEMU, UML, and XEN.
+ 
+ """
+ 
++import errno
+ import hashlib
+ import functools
+ import multiprocessing
+ import os
++import select
+ import shutil
++import stat
+ import sys
+ import tempfile
+ import uuid
+ 
++import eventlet
+ from eventlet import greenthread
+ from xml.dom import minidom
+ from xml.etree import ElementTree
+@@ -138,6 +142,9 @@ libvirt_opts = [
+     cfg.BoolOpt('libvirt_use_virtio_for_bridges',
+                 default=False,
+                 help='Use virtio for bridge interfaces'),
++    cfg.IntOpt('libvirt_console_log_size',
++                default= 2 ** 16,
++                help='libvirt console log ringbuffer size'),
+     cfg.StrOpt('libvirt_disk_prefix',
+                default=None,
+                help='Override the default disk prefix for the devices attached'
+@@ -176,6 +183,57 @@ def _get_eph_disk(ephemeral):
+     return 'disk.eph' + str(ephemeral['num'])
+ 
+ 
++class ConsoleLogger(object):
++
++    def __init__(self, fifo_path, ringbuffer_path):
++        self.fifo_path = fifo_path
++        self.fd = None
++        self.data_queue = eventlet.queue.LightQueue(0)
++        self.ringbuffer = utils.RingBuffer(ringbuffer_path,
++                                           FLAGS.libvirt_console_log_size)
++        self.reader_thread = eventlet.spawn(self._reader_thread_func)
++        self.writer_thread = eventlet.spawn(self._writer_thread_func)
++
++    def _reopen(self):
++        if self.fd is not None:
++            os.close(self.fd)
++            self.fd = None
++        self.fd = os.open(self.fifo_path, os.O_RDONLY | os.O_NONBLOCK)
++
++    def _reader_thread_func(self):
++        self._reopen()
++        while True:
++            select.select([self.fd], [], [])
++            data = os.read(self.fd, 1024)
++            if data:
++                self.data_queue.put(data)
++            else:
++                self._reopen()
++
++    def _writer_thread_func(self):
++        try:
++            data = self.data_queue.get()
++            while data:
++                self.ringbuffer.write(data)
++                data = self.data_queue.get()
++        finally:
++            self.ringbuffer.close()
++
++    def close(self):
++        self.reader_thread.kill()
++        self.data_queue.put(None)
++        try:
++            self.writer_thread.wait()
++        except eventlet.greenlet.GreenletExit:
++            pass
++        if self.fd is not None:
++            os.close(self.fd)
++            self.fd = None
++
++    def peek(self):
++        return self.ringbuffer.peek()
++
++
+ class LibvirtConnection(driver.ComputeDriver):
+ 
+     def __init__(self, read_only):
+@@ -209,6 +267,8 @@ class LibvirtConnection(driver.ComputeDr
+ 
+         self.image_cache_manager = imagecache.ImageCacheManager()
+ 
++        self.console_loggers = dict()
++
+     @property
+     def host_state(self):
+         if not self._host_state:
+@@ -217,7 +277,11 @@ class LibvirtConnection(driver.ComputeDr
+ 
+     def init_host(self, host):
+         # NOTE(nsokolov): moved instance restarting to ComputeManager
+-        pass
++        for name in self.list_instances():
++            base_path = os.path.join(FLAGS.instances_path, name)
++            fifo_path = os.path.join(base_path, 'console.fio.out')
++            ringbuffer_path = os.path.join(base_path, 'console.ring')
++            self._start_console_logger(name, fifo_path, ringbugger_path)
+ 
+     @property
+     def libvirt_xml(self):
+@@ -278,6 +342,15 @@ class LibvirtConnection(driver.ComputeDr
+         else:
+             return libvirt.openAuth(uri, auth, 0)
+ 
++    def _start_console_logger(self, name, fifo_path, ringbuffer_path):
++        self._stop_console_logger(name)
++        self.console_loggers[name] = ConsoleLogger(fifo_path, ringbuffer_path)
++
++    def _stop_console_logger(self, name):
++        if name in self.console_loggers:
++            self.console_loggers[name].close()
++            del self.console_loggers[name]
++
+     def instance_exists(self, instance_id):
+         """Efficient override of base instance_exists method."""
+         try:
+@@ -419,6 +492,7 @@ class LibvirtConnection(driver.ComputeDr
+     def _cleanup(self, instance):
+         target = os.path.join(FLAGS.instances_path, instance['name'])
+         instance_name = instance['name']
++        self._stop_console_loger(instance_name)
+         LOG.info(_('Deleting instance files %(target)s') % locals(),
+                  instance=instance)
+         if FLAGS.libvirt_type == 'lxc':
+@@ -776,10 +850,10 @@ class LibvirtConnection(driver.ComputeDr
+ 
+     @exception.wrap_exception()
+     def get_console_output(self, instance):
+-        console_log = os.path.join(FLAGS.instances_path, instance['name'],
+-                                   'console.log')
++        console_fifo = os.path.join(FLAGS.instances_path, instance['name'],
++                                   'console.fifo.out')
+ 
+-        libvirt_utils.chown(console_log, os.getuid())
++        libvirt_utils.chown(console_fifo, os.getuid())
+ 
+         if FLAGS.libvirt_type == 'xen':
+             # Xen is special
+@@ -787,12 +861,12 @@ class LibvirtConnection(driver.ComputeDr
+                                          'ttyconsole',
+                                          instance['name'])
+             data = self._flush_xen_console(virsh_output)
+-            fpath = self._append_to_file(data, console_log)
++            fpath = self._append_to_file(data, console_fifo)
+         elif FLAGS.libvirt_type == 'lxc':
+             # LXC is also special
+             LOG.info(_("Unable to read LXC console"), instance=instance)
+         else:
+-            fpath = console_log
++            fpath = console_fifo
+ 
+         return libvirt_utils.load_file(fpath)
+ 
+@@ -930,7 +1004,24 @@ class LibvirtConnection(driver.ComputeDr
+             libvirt_utils.ensure_tree(container_dir)
+ 
+         # NOTE(vish): No need add the suffix to console.log
+-        libvirt_utils.write_to_file(basepath('console.log', ''), '', 007)
++        console_fifo = basepath('console.fifo', '')
++        console_ring = basepath('console.ring', '')
++
++        for fifo_suffix in ['.in', '.out']:
++            console_fifo_suffix = console_fifo + fifo_suffix
++            try:
++                console_fifo_stat = os.stat(console_fifo_suffix)
++            except OSError, e:
++                if e.errno == errno.ENOENT:
++                    os.mkfifo(console_fifo_suffix, 0660)
++                else:
++                    raise
++            else:
++                libvirt_utils.write_to_file(basepath('console.fifo', ''), '', 007)
++
++        self._start_console_logger(instance['name'],
++                                   console_fifo + 'out',
++                                   console_ring)
+ 
+         if not disk_images:
+             disk_images = {'image_id': instance['image_ref'],

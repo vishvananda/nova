@@ -1,0 +1,13 @@
+Index: nova-2012.1~e4~20120207.12506/bin/nova-manage
+===================================================================
+--- nova-2012.1~e4~20120207.12506.orig/bin/nova-manage
++++ nova-2012.1~e4~20120207.12506/bin/nova-manage
+@@ -2307,7 +2307,7 @@
+ 
+ def main():
+     """Parse options and call the appropriate class/method."""
+-    flagfile = utils.default_flagfile()
++    flagfile = utils.default_flagfile('/etc/nova/nova.conf')
+ 
+     if flagfile and not os.access(flagfile, os.R_OK):
+         st = os.stat(flagfile)

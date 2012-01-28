@@ -1,0 +1,4 @@
+/var/log/nova/nova-consoleauth.log {
+    daily
+    missingok
+}
