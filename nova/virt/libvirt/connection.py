@@ -1303,6 +1303,26 @@ class LibvirtConnection(driver.ComputeDriver):
 
         return domain
 
+    def get_all_block_devices(self):
+        """
+        Return all block devices in use on this node.
+        """
+        devices = []
+        for instance_name in self.list_instances():
+            domain = self._lookup_by_name(instance_name)
+            try:
+                doc = ElementTree.fromstring(domain.XMLDesc(0))
+            except Exception:
+                continue
+            ret = doc.findall('./devices/disk')
+            for node in ret:
+                if node.get('type') != 'block':
+                    continue
+                for child in node.getchildren():
+                    if child.tag == 'source':
+                        devices.append(child.get('dev'))
+        return devices
+
     def get_disks(self, instance_name):
         """
         Note that this function takes an instance name.

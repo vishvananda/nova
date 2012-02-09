@@ -349,6 +349,8 @@ class ISCSIDriver(VolumeDriver):
 
         :target_portal:    the portal of the iSCSI target
 
+        :target_lun:    the lun of the iSCSI target
+
         :volume_id:    the id of the volume (currently used by xen)
 
         :auth_method:, :auth_username:, :auth_password:
@@ -383,6 +385,10 @@ class ISCSIDriver(VolumeDriver):
         properties['volume_id'] = volume['id']
         properties['target_iqn'] = iscsi_name
         properties['target_portal'] = iscsi_portal
+        if FLAGS.iscsi_helper == 'tgtadm':
+            properties['target_lun'] = 1
+        else:
+            properties['target_lun'] = 0
 
         auth = volume['provider_auth']
 
@@ -794,14 +800,10 @@ class ZadaraBEDriver(ISCSIDriver):
 
         self._iscsiadm_update(iscsi_properties, "node.startup", "automatic")
 
-        if FLAGS.iscsi_helper == 'tgtadm':
-            mount_device = ("/dev/disk/by-path/ip-%s-iscsi-%s-lun-1" %
-                            (iscsi_properties['target_portal'],
-                             iscsi_properties['target_iqn']))
-        else:
-            mount_device = ("/dev/disk/by-path/ip-%s-iscsi-%s-lun-0" %
-                            (iscsi_properties['target_portal'],
-                             iscsi_properties['target_iqn']))
+        mount_device = ("/dev/disk/by-path/ip-%s-iscsi-%s-lun-%s" %
+                        (iscsi_properties['target_portal'],
+                         iscsi_properties['target_iqn'],
+                         iscsi_properties['target_lun']))
 
         # The /dev/disk/by-path/... node is not always present immediately
         # TODO(justinsb): This retry-with-delay is a pattern, move to utils?
