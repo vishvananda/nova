@@ -616,28 +616,33 @@ class LibvirtConnection(driver.ComputeDriver):
         if 'container_format' in base:
             metadata['container_format'] = base['container_format']
 
-        # Make the snapshot
-        snapshot_name = uuid.uuid4().hex
-        snapshot_xml = """
-        <domainsnapshot>
-            <name>%s</name>
-        </domainsnapshot>
-        """ % snapshot_name
-        snapshot_ptr = virt_dom.snapshotCreateXML(snapshot_xml, 0)
-
         # Find the disk
         xml_desc = virt_dom.XMLDesc(0)
         domain = ElementTree.fromstring(xml_desc)
         source = domain.find('devices/disk/source')
         disk_path = source.get('file')
 
+        # Make the snapshot
+        snapshot_name = uuid.uuid4().hex
+
         # Export the snapshot to a raw image
         with utils.tempdir() as tmpdir:
+            out_path = os.path.join(tmpdir, snapshot_name)
+            snapshot_xml = """
+            <domainsnapshot>
+                <name>%s</name>
+                <disks>
+                    <disk name='%s'>
+                          <source file='%s' />
+                          <driver type='%s' />
+                    </disk>
+                </disks>
+                <state>disk_snapshot</state>
+            </domainsnapshot>
+            """ % (snapshot_name, disk_path, out_path, image_format)
+            LOG.debug(snapshot_xml)
+            snapshot_ptr = virt_dom.snapshotCreateXML(snapshot_xml, 0)
             try:
-                out_path = os.path.join(tmpdir, snapshot_name)
-                libvirt_utils.extract_snapshot(disk_path, source_format,
-                                               snapshot_name, out_path,
-                                               image_format)
                 # Upload that image to the image service
                 with libvirt_utils.file_open(out_path) as image_file:
                     image_service.update(context,
