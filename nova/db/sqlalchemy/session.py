@@ -20,6 +20,7 @@
 
 import time
 
+from eventlet import db_pool
 import sqlalchemy.interfaces
 import sqlalchemy.orm
 from sqlalchemy.exc import DisconnectionError, OperationalError
@@ -32,6 +33,11 @@ import nova.log as logging
 
 FLAGS = flags.FLAGS
 LOG = logging.getLogger(__name__)
+
+try:
+    import MySQLdb
+except ImportError:
+    MySQLdb = None
 
 _ENGINE = None
 _MAKER = None
@@ -121,6 +127,24 @@ def get_engine():
 
         if 'mysql' in connection_dict.drivername:
             engine_args['listeners'] = [MySQLPingListener()]
+
+        if MySQLdb and "mysql" in connection_dict.drivername:
+            LOG.info(_("Using mysql/eventlet db_pool."))
+            # MySQLdb won't accept 'None' in the password field
+            password = connection_dict.password or ''
+            pool_args = {
+                "db": connection_dict.database,
+                "passwd": password,
+                "host": connection_dict.host,
+                "user": connection_dict.username,
+                "min_size": 10,
+                "max_size": 10,
+                "max_idle": FLAGS.sql_idle_timeout,
+            }
+            creator = db_pool.ConnectionPool(MySQLdb, **pool_args)
+            engine_args["pool_size"] = 10
+            engine_args["pool_timeout"] = 30
+            engine_args["creator"] = creator.create
 
         _ENGINE = sqlalchemy.create_engine(FLAGS.sql_connection, **engine_args)
 
