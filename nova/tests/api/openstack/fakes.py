@@ -155,7 +155,7 @@ def stub_out_rate_limiting(stubs):
 
 def stub_out_instance_quota(stubs, allowed):
     def fake_allowed_instances(context, max_count, instance_type):
-        return allowed
+        return allowed, allowed, allowed
     stubs.Set(nova.quota, 'allowed_instances', fake_allowed_instances)
 
 

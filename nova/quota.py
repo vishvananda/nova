@@ -60,7 +60,7 @@ quota_opts = [
     cfg.IntOpt('quota_security_group_rules',
                default=20,
                help='number of security rules per security group'),
-    ]
+]
 
 FLAGS = flags.FLAGS
 FLAGS.register_opts(quota_opts)
@@ -77,7 +77,7 @@ def _get_default_quotas():
         'metadata_items': FLAGS.quota_metadata_items,
         'injected_files': FLAGS.quota_max_injected_files,
         'injected_file_content_bytes':
-            FLAGS.quota_max_injected_file_content_bytes,
+        FLAGS.quota_max_injected_file_content_bytes,
         'security_groups': FLAGS.quota_security_groups,
         'security_group_rules': FLAGS.quota_security_group_rules,
     }
@@ -104,7 +104,8 @@ def _get_request_allotment(requested, used, quota):
 
 
 def allowed_instances(context, requested_instances, instance_type):
-    """Check quota and return min(requested_instances, allowed_instances)."""
+    """Check quota and return min(requested_instances, allowed_instances)
+    for each type of instance constraint."""
     project_id = context.project_id
     context = context.elevated()
     requested_cores = requested_instances * instance_type['vcpus']
@@ -118,14 +119,20 @@ def allowed_instances(context, requested_instances, instance_type):
     allowed_cores = _get_request_allotment(requested_cores, used_cores,
                                            quota['cores'])
     allowed_ram = _get_request_allotment(requested_ram, used_ram, quota['ram'])
+    # We need this value to exist, so setting it to be arbitrarily large
+    allowed_instances_vcpus = 999999
+    allowed_instances_memory = 999999
     if instance_type['vcpus']:
-        allowed_instances = min(allowed_instances,
-                                allowed_cores // instance_type['vcpus'])
+        allowed_instances_vcpus = allowed_cores // instance_type['vcpus']
     if instance_type['memory_mb']:
-        allowed_instances = min(allowed_instances,
-                                allowed_ram // instance_type['memory_mb'])
+        allowed_instances_memory = allowed_ram // instance_type['memory_mb']
 
-    return min(requested_instances, allowed_instances)
+    allowed_instances = min(requested_instances, allowed_instances)
+    allowed_instances_vcpus = min(requested_instances, allowed_instances_vcpus)
+    allowed_instances_memory = min(requested_instances,
+                                   allowed_instances_memory)
+
+    return allowed_instances, allowed_instances_vcpus, allowed_instances_memory
 
 
 def allowed_volumes(context, requested_volumes, size):
@@ -180,22 +187,22 @@ def allowed_security_groups(context, requested_security_groups):
     used_sec_groups = db.security_group_count_by_project(context, project_id)
     quota = get_project_quotas(context, project_id)
     allowed_sec_groups = _get_request_allotment(requested_security_groups,
-                                                  used_sec_groups,
-                                                  quota['security_groups'])
+                                                used_sec_groups,
+                                                quota['security_groups'])
     return min(requested_security_groups, allowed_sec_groups)
 
 
 def allowed_security_group_rules(context, security_group_id,
-        requested_rules):
+                                 requested_rules):
     """Check quota and return min(requested, allowed) sec group rules."""
     project_id = context.project_id
     context = context.elevated()
     used_rules = db.security_group_rule_count_by_group(context,
-                                                            security_group_id)
+                                                       security_group_id)
     quota = get_project_quotas(context, project_id)
     allowed_rules = _get_request_allotment(requested_rules,
-                                              used_rules,
-                                              quota['security_group_rules'])
+                                           used_rules,
+                                           quota['security_group_rules'])
     return min(requested_rules, allowed_rules)
 
 

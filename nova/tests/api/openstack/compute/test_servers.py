@@ -2139,7 +2139,7 @@ class ServersControllerCreateTest(test.TestCase):
             server = self.controller.create(req, body).obj['server']
             fail('excepted quota to be exceeded')
         except webob.exc.HTTPRequestEntityTooLarge as e:
-            code = {'code': 'InstanceLimitExceeded'}
+            code = {'code': 'LimitExceeded:  instances vcpus memory_mb'}
             self.assertEquals(e.explanation,
                               _('Quota exceeded: code=%(code)s') % code)
 

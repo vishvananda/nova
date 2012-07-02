@@ -256,9 +256,24 @@ class API(BaseAPI):
 
         block_device_mapping = block_device_mapping or []
 
-        num_instances = quota.allowed_instances(context, max_count,
-                                                instance_type)
-        if num_instances < min_count:
+        allowed_instances, allowed_vcpus_instances, allowed_mem_instances = \
+                quota.allowed_instances(context,
+                                        max_count,
+                                        instance_type)
+        num_instances = min(allowed_instances,
+                            allowed_vcpus_instances,
+                            allowed_mem_instances)
+
+        overs = ""
+
+        if allowed_instances < min_count:
+            overs += " instances"
+        if allowed_vcpus_instances < min_count:
+            overs += " vcpus"
+        if allowed_mem_instances < min_count:
+            overs += " memory_mb"
+
+        if overs:
             pid = context.project_id
             if num_instances <= 0:
                 msg = _("Cannot run any more instances of this type.")
@@ -267,7 +282,7 @@ class API(BaseAPI):
                        num_instances)
             LOG.warn(_("Quota exceeded for %(pid)s,"
                   " tried to run %(min_count)s instances. " + msg) % locals())
-            raise exception.QuotaError(code="InstanceLimitExceeded")
+            raise exception.QuotaError(code=("LimitExceeded: %s" % overs))
 
         self._check_metadata_properties_quota(context, metadata)
         self._check_injected_file_quota(context, injected_files)

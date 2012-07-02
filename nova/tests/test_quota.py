@@ -59,12 +59,11 @@ class QuotaTestCase(test.TestCase):
 
         def rpc_call_wrapper(context, topic, msg):
             """Stub out the scheduler creating the instance entry"""
-            if (topic == FLAGS.scheduler_topic and
-                msg['method'] == 'run_instance'):
+            if (topic == FLAGS.scheduler_topic and msg['method'] ==
+                    'run_instance'):
                 scheduler = scheduler_driver.Scheduler
                 instance = scheduler().create_instance_db_entry(
-                        context,
-                        msg['args']['request_spec'])
+                    context, msg['args']['request_spec'])
                 return [scheduler_driver.encode_instance(instance)]
             else:
                 return orig_rpc_call(context, topic, msg)
@@ -95,39 +94,39 @@ class QuotaTestCase(test.TestCase):
             'm1.tiny': dict(memory_mb=512, vcpus=1, root_gb=0, flavorid=1),
             'm1.small': dict(memory_mb=2048, vcpus=1, root_gb=20, flavorid=2),
             'm1.medium':
-                dict(memory_mb=4096, vcpus=2, root_gb=40, flavorid=3),
+            dict(memory_mb=4096, vcpus=2, root_gb=40, flavorid=3),
             'm1.large': dict(memory_mb=8192, vcpus=4, root_gb=80, flavorid=4),
             'm1.xlarge':
-                dict(memory_mb=16384, vcpus=8, root_gb=160, flavorid=5),
+            dict(memory_mb=16384, vcpus=8, root_gb=160, flavorid=5),
             'm1.nocpu': dict(memory_mb=512, vcpus=0, root_gb=0, flavorid=6),
             'm1.nomem': dict(memory_mb=0, vcpus=1, root_gb=0, flavorid=7)}
         return instance_types[name]
 
     def test_quota_no_mem_no_cpu(self):
+        num_instances = quota.allowed_instances(self.context,
+            100, self._get_instance_type('m1.nocpu'))
+        self.assertEqual(min(num_instances), 2)
         num_instances = quota.allowed_instances(self.context, 100,
-            self._get_instance_type('m1.nocpu'))
-        self.assertEqual(num_instances, 2)
-        num_instances = quota.allowed_instances(self.context, 100,
-            self._get_instance_type('m1.nomem'))
-        self.assertEqual(num_instances, 2)
+        self._get_instance_type('m1.nomem'))
+        self.assertEqual(min(num_instances), 2)
 
     def test_quota_overrides(self):
         """Make sure overriding a projects quotas works"""
         num_instances = quota.allowed_instances(self.context, 100,
             self._get_instance_type('m1.small'))
-        self.assertEqual(num_instances, 2)
+        self.assertEqual(min(num_instances), 2)
         db.quota_create(self.context, self.project_id, 'instances', 10)
         num_instances = quota.allowed_instances(self.context, 100,
             self._get_instance_type('m1.small'))
-        self.assertEqual(num_instances, 4)
+        self.assertEqual(min(num_instances), 4)
         db.quota_create(self.context, self.project_id, 'cores', 100)
         num_instances = quota.allowed_instances(self.context, 100,
             self._get_instance_type('m1.small'))
-        self.assertEqual(num_instances, 10)
+        self.assertEqual(min(num_instances), 10)
         db.quota_create(self.context, self.project_id, 'ram', 3 * 2048)
         num_instances = quota.allowed_instances(self.context, 100,
             self._get_instance_type('m1.small'))
-        self.assertEqual(num_instances, 3)
+        self.assertEqual(min(num_instances), 3)
 
         # metadata_items
         too_many_items = FLAGS.quota_metadata_items + 1000
@@ -147,54 +146,54 @@ class QuotaTestCase(test.TestCase):
         instance_type = self._get_instance_type('m1.small')
         num_instances = quota.allowed_instances(self.context, 100,
                                                 instance_type)
-        self.assertEqual(num_instances, 2)
+        self.assertEqual(min(num_instances), 2)
         db.quota_create(self.context, self.project_id, 'instances', None)
         num_instances = quota.allowed_instances(self.context, 100,
                                                 instance_type)
-        self.assertEqual(num_instances, 100)
+        self.assertEqual(min(num_instances), 100)
         db.quota_create(self.context, self.project_id, 'instances', -1)
         num_instances = quota.allowed_instances(self.context, 100,
                                                 instance_type)
-        self.assertEqual(num_instances, 100)
+        self.assertEqual(min(num_instances), 100)
         num_instances = quota.allowed_instances(self.context, 101,
                                                 instance_type)
-        self.assertEqual(num_instances, 101)
+        self.assertEqual(min(num_instances), 101)
 
     def test_unlimited_ram(self):
         self.flags(quota_instances=-1, quota_ram=2 * 2048, quota_cores=-1)
         instance_type = self._get_instance_type('m1.small')
         num_instances = quota.allowed_instances(self.context, 100,
                                                 instance_type)
-        self.assertEqual(num_instances, 2)
+        self.assertEqual(min(num_instances), 2)
         db.quota_create(self.context, self.project_id, 'ram', None)
         num_instances = quota.allowed_instances(self.context, 100,
                                                 instance_type)
-        self.assertEqual(num_instances, 100)
+        self.assertEqual(min(num_instances), 100)
         db.quota_create(self.context, self.project_id, 'ram', -1)
         num_instances = quota.allowed_instances(self.context, 100,
                                                 instance_type)
-        self.assertEqual(num_instances, 100)
+        self.assertEqual(min(num_instances), 100)
         num_instances = quota.allowed_instances(self.context, 101,
                                                 instance_type)
-        self.assertEqual(num_instances, 101)
+        self.assertEqual(min(num_instances), 101)
 
     def test_unlimited_cores(self):
         self.flags(quota_instances=-1, quota_ram=-1, quota_cores=2)
         instance_type = self._get_instance_type('m1.small')
         num_instances = quota.allowed_instances(self.context, 100,
                                                 instance_type)
-        self.assertEqual(num_instances, 2)
+        self.assertEqual(min(num_instances), 2)
         db.quota_create(self.context, self.project_id, 'cores', None)
         num_instances = quota.allowed_instances(self.context, 100,
                                                 instance_type)
-        self.assertEqual(num_instances, 100)
+        self.assertEqual(min(num_instances), 100)
         db.quota_create(self.context, self.project_id, 'cores', -1)
         num_instances = quota.allowed_instances(self.context, 100,
                                                 instance_type)
-        self.assertEqual(num_instances, 100)
+        self.assertEqual(min(num_instances), 100)
         num_instances = quota.allowed_instances(self.context, 101,
                                                 instance_type)
-        self.assertEqual(num_instances, 101)
+        self.assertEqual(min(num_instances), 101)
 
     def _do_test_volume_quota(self, resource):
 
