@@ -438,6 +438,8 @@ class FloatingIP(object):
         Makes sure everything makes sense then calls _associate_floating_ip,
         rpc'ing to correct host if i'm not it.
         """
+        LOG.debug("APPLIANCE-2420 MARKER 10 TIME %s",
+            datetime.datetime.utcnow().isoformat())
         floating_ip = self.db.floating_ip_get_by_address(context,
                                                          floating_address)
         # handle auto_assigned
@@ -465,29 +467,44 @@ class FloatingIP(object):
         interface = floating_ip['interface']
         if host == self.host:
             # i'm the correct host
+            LOG.debug("APPLIANCE-2420 MARKER 11 TIME %s",
+                datetime.datetime.utcnow().isoformat())
             self._associate_floating_ip(context, floating_address,
                                         fixed_address, interface)
         else:
             # send to correct host
+
+            LOG.debug("APPLIANCE-2420 MARKER 12 TIME %s",
+                datetime.datetime.utcnow().isoformat())
             rpc.call(context,
                      self.db.queue_get_for(context, FLAGS.network_topic, host),
                      {'method': '_associate_floating_ip',
                       'args': {'floating_address': floating_address,
                                'fixed_address': fixed_address,
                                'interface': interface}})
+        LOG.debug("APPLIANCE-2420 MARKER 13 TIME %s",
+            datetime.datetime.utcnow().isoformat())
 
     def _associate_floating_ip(self, context, floating_address, fixed_address,
                                interface):
         """Performs db and driver calls to associate floating ip & fixed ip"""
         # associate floating ip
+        LOG.debug("APPLIANCE-2420 MARKER 20 TIME %s",
+            datetime.datetime.utcnow().isoformat())
         self.db.floating_ip_fixed_ip_associate(context,
                                                floating_address,
                                                fixed_address,
                                                self.host)
+        LOG.debug("APPLIANCE-2420 MARKER 21 TIME %s",
+            datetime.datetime.utcnow().isoformat())
         try:
             # gogo driver time
+            LOG.debug("APPLIANCE-2420 MARKER 22 TIME %s",
+                datetime.datetime.utcnow().isoformat())
             self.l3driver.add_floating_ip(floating_address, fixed_address,
                     interface)
+            LOG.debug("APPLIANCE-2420 MARKER 23 TIME %s",
+                datetime.datetime.utcnow().isoformat())
         except exception.ProcessExecutionError as e:
             fixed_address = self.db.floating_ip_disassociate(context,
                                                              floating_address)
@@ -700,6 +717,7 @@ class NetworkManager(manager.SchedulerDependentManager):
 
     # if True, this manager leverages DHCP
     DHCP = False
+
 
     timeout_fixed_ips = True
 

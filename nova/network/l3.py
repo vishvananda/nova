@@ -16,6 +16,7 @@
 #    under the License.
 
 import random
+import datetime
 
 from nova import flags
 from nova import log as logging
@@ -102,8 +103,14 @@ class LinuxNetL3(L3Driver):
         linux_net.unplug(network_ref)
 
     def add_floating_ip(self, floating_ip, fixed_ip, l3_interface_id):
+        LOG.debug("APPLIANCE-2420 MARKER 30 TIME %s",
+            datetime.datetime.utcnow().isoformat())
         linux_net.bind_floating_ip(floating_ip, l3_interface_id)
+        LOG.debug("APPLIANCE-2420 MARKER 31 TIME %s",
+            datetime.datetime.utcnow().isoformat())
         linux_net.ensure_floating_forward(floating_ip, fixed_ip)
+        LOG.debug("APPLIANCE-2420 MARKER 32 TIME %s",
+            datetime.datetime.utcnow().isoformat())
 
     def remove_floating_ip(self, floating_ip, fixed_ip, l3_interface_id):
         linux_net.unbind_floating_ip(floating_ip, l3_interface_id)
