@@ -21,6 +21,7 @@ from nova.compute import instance_types
 from nova.compute import utils as compute_utils
 from nova import context
 from nova import db
+from nova import exception
 from nova import flags
 from nova.openstack.common import importutils
 from nova.openstack.common import log as logging
@@ -34,6 +35,71 @@ from nova import utils
 LOG = logging.getLogger(__name__)
 FLAGS = flags.FLAGS
 flags.DECLARE('stub_network', 'nova.compute.manager')
+
+
+class ComputeNextDeviceTestCase(test.TestCase):
+    def setUp(self):
+        super(ComputeNextDeviceTestCase, self).setUp()
+        self.context = context.RequestContext('fake', 'fake')
+        self.instance = {
+                'uuid': 'fake',
+                'root_device_name': '/dev/vda',
+                'default_ephemeral_device': '/dev/vdb'
+        }
+
+    def _get_device(self):
+        return compute_utils.get_next_device_for_instance(self.context,
+                                                          self.instance)
+
+    @staticmethod
+    def _fake_bdm(device):
+        return {
+            'device_name': device,
+            'no_device': None,
+            'volume_id': 'fake',
+            'snapshot_id': None
+        }
+
+    def test_incrementing(self):
+        cases = (
+                 ('/dev/vdc', '/dev/vdd'),
+                 ('/dev/vdz', '/dev/vdaa'),
+                 ('/dev/vdaz', '/dev/vdba'),
+                 ('/dev/vdzz', '/dev/vdaaa'),
+                )
+        for device, expected in cases:
+            self.stubs.Set(db, 'block_device_mapping_get_all_by_instance',
+                           lambda context, instance: [self._fake_bdm(device)])
+            device = self._get_device()
+            self.assertEqual(device, expected)
+
+    def test_highest_gap(self):
+        data = [self._fake_bdm('/dev/vdc'), self._fake_bdm('/dev/vdq')]
+        self.stubs.Set(db, 'block_device_mapping_get_all_by_instance',
+                       lambda context, instance: data)
+        device = self._get_device()
+        self.assertEqual(device, '/dev/vdr')
+
+    def test_highest_longer(self):
+        data = [self._fake_bdm('/dev/vdab'), self._fake_bdm('/dev/vdq')]
+        self.stubs.Set(db, 'block_device_mapping_get_all_by_instance',
+                       lambda context, instance: data)
+        device = self._get_device()
+        self.assertEqual(device, '/dev/vdac')
+
+    def test_no_bdms(self):
+        data = []
+        self.stubs.Set(db, 'block_device_mapping_get_all_by_instance',
+                       lambda context, instance: data)
+        device = self._get_device()
+        self.assertEqual(device, '/dev/vdc')
+
+    def test_invalid(self):
+        self.stubs.Set(db, 'block_device_mapping_get_all_by_instance',
+                       lambda context, instance: [])
+        self.instance['root_device_name'] = "baddata"
+        self.assertRaises(exception.InvalidDevicePath,
+                          self._get_device)
 
 
 class UsageInfoTestCase(test.TestCase):

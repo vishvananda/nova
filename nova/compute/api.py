@@ -1613,8 +1613,16 @@ class API(base.Base):
 
     @wrap_check_policy
     @check_instance_lock
-    def attach_volume(self, context, instance, volume_id, device):
+    def attach_volume(self, context, instance, volume_id, device=None):
         """Attach an existing volume to an existing instance."""
+        if not device:
+            # NOTE(vish): This is done on the compute host because we want
+            #             to avoid a race where two devices are requested at
+            #             the same time. When db access is removed from
+            #             compute, the bdm will be created here and we will
+            #             have to make sure that they are assigned atomically.
+            device = self.compute_rpcapi.get_unused_device(context,
+                                                           instance=instance)
         if not re.match("^/dev/x{0,1}[a-z]d[a-z]+$", device):
             raise exception.InvalidDevicePath(path=device)
         volume = self.volume_api.get(context, volume_id)
@@ -1622,6 +1630,7 @@ class API(base.Base):
         self.volume_api.reserve_volume(context, volume)
         self.compute_rpcapi.attach_volume(context, instance=instance,
                 volume_id=volume_id, mountpoint=device)
+        return device
 
     @check_instance_lock
     def _detach_volume(self, context, instance, volume_id):

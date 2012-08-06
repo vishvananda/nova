@@ -119,6 +119,7 @@ class ComputeAPI(nova.openstack.common.rpc.proxy.RpcProxy):
                 - remove topic, it was unused
         1.39 - Remove instance_uuid, add instance argument to run_instance()
         1.40 - Remove instance_id, add instance argument to live_migration()
+        1.41 - Adds get_unused_device()
     '''
 
     BASE_RPC_API_VERSION = '1.0'
@@ -235,6 +236,13 @@ class ComputeAPI(nova.openstack.common.rpc.proxy.RpcProxy):
                 instance=instance_p),
                 topic=_compute_topic(self.topic, ctxt, None, instance),
                 version='1.16')
+
+    def get_unused_device(self, ctxt, instance):
+        instance_p = jsonutils.to_primitive(instance)
+        return self.call(ctxt, self.make_msg('get_unused_device',
+                instance=instance_p),
+                topic=_compute_topic(self.topic, ctxt, None, instance),
+                version='1.41')
 
     def get_vnc_console(self, ctxt, instance, console_type):
         instance_p = jsonutils.to_primitive(instance)

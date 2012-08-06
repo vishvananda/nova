@@ -340,7 +340,7 @@ class VolumeAttachmentController(object):
             raise exc.HTTPUnprocessableEntity()
 
         volume_id = body['volumeAttachment']['volumeId']
-        device = body['volumeAttachment']['device']
+        device = body['volumeAttachment'].get('device')
 
         msg = _("Attach volume %(volume_id)s to instance %(server_id)s"
                 " at %(device)s") % locals()
@@ -348,8 +348,8 @@ class VolumeAttachmentController(object):
 
         try:
             instance = self.compute_api.get(context, server_id)
-            self.compute_api.attach_volume(context, instance,
-                                           volume_id, device)
+            device = self.compute_api.attach_volume(context, instance,
+                                                    volume_id, device)
         except exception.NotFound:
             raise exc.HTTPNotFound()
 
@@ -357,6 +357,7 @@ class VolumeAttachmentController(object):
         attachment = {}
         attachment['id'] = volume_id
         attachment['volumeId'] = volume_id
+        attachment['device'] = device
 
         # NOTE(justinsb): And now, we have a problem...
         # The attach is async, so there's a window in which we don't see

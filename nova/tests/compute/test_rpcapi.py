@@ -166,6 +166,10 @@ class ComputeRpcAPITestCase(test.TestCase):
         self._test_compute_api('get_diagnostics', 'call',
                 instance=self.fake_instance, version='1.16')
 
+    def test_get_unused_device(self):
+        self._test_compute_api('get_unused_device', 'call',
+                instance=self.fake_instance, version='1.39')
+
     def test_get_vnc_console(self):
         self._test_compute_api('get_vnc_console', 'call',
                 instance=self.fake_instance, console_type='type',

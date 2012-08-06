@@ -221,7 +221,7 @@ def _get_image_meta(context, image_ref):
 class ComputeManager(manager.SchedulerDependentManager):
     """Manages the running instances from creation to destruction."""
 
-    RPC_API_VERSION = '1.40'
+    RPC_API_VERSION = '1.41'
 
     def __init__(self, compute_driver=None, *args, **kwargs):
         """Load configuration options and connect to the hypervisor."""
@@ -1921,6 +1921,16 @@ class ComputeManager(manager.SchedulerDependentManager):
                                                                 connector)
         self.volume_api.attach(context, volume, instance_uuid, mountpoint)
         return connection_info
+
+    @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
+    @wrap_instance_fault
+    def get_unused_device(self, context, instance):
+
+        @utils.synchronized(instance['uuid'])
+        def do_get_next_device():
+            return compute_utils.get_next_device_for_instance(context,
+                                                              instance)
+        device = do_get_next_device()
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @checks_instance_lock
