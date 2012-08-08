@@ -17,7 +17,9 @@
 """Compute-related Utilities and helpers."""
 
 import netaddr
+import re
 
+from nova import block_device
 from nova import context
 from nova import db
 from nova import exception
@@ -29,6 +31,49 @@ from nova import utils
 
 
 FLAGS = flags.FLAGS
+
+
+def get_next_device_for_instance(context, instance):
+    # NOTE(vish): this will generate a unique device name that is not
+    #             in use already. It is a reasonable guess at where
+    #             it will show up in a linux guest, but it may not
+    #             always be correct
+    # NOTE(vish): Include deleted bdms so we don't reuse the
+    #             same mountpoint. Guests don't appear to reuse the
+    #             same identifiers.
+    with utils.temporary_mutation(context, read_deleted="yes"):
+        bdms = db.block_device_mapping_get_all_by_instance(context,
+                instance['id'])
+    mappings = block_device.instance_block_mapping(instance, bdms)
+    last = ''
+    try:
+        match = re.match("(^/dev/x{0,1}[a-z]d)[a-z]+$", mappings['root'])
+        prefix = match.groups()[0]
+    except (TypeError, AttributeError, ValueError):
+        raise exception.InvalidDevicePath(path=mappings['root'])
+    for _name, device in mappings.iteritems():
+        suffix = block_device.strip_prefix(device)
+        # NOTE(vish): delete numbers in case we have something like
+        #             /dev/sda1
+        suffix = re.sub("\d+", "", suffix)
+        print suffix, last
+        if len(last) > len(suffix):
+            continue
+        if len(last) < len(suffix) or suffix > last:
+            last = suffix
+    inc = True
+    out = ''
+    for char in last[::-1]:
+        if inc:
+            char = chr(ord(char) + 1)
+            inc = False
+        if char == '{':
+            char = 'a'
+            inc = True
+        out = char + out
+    if inc:
+        out += 'a'
+    return prefix + out
 
 
 def notify_usage_exists(instance_ref, current_period=False):

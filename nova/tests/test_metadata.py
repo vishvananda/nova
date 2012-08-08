@@ -23,6 +23,7 @@ import webob
 
 from nova.api.metadata import handler
 from nova.db.sqlalchemy import api
+from nova import block_device
 from nova import db
 from nova import exception
 from nova import flags
@@ -179,7 +180,7 @@ class MetadataTestCase(test.TestCase):
 
         self.assertEqual(self.app._format_instance_mapping(ctxt,
                                                            instance_ref0),
-                         handler._DEFAULT_MAPPINGS)
+                         block_device._DEFAULT_MAPPINGS)
         self.assertEqual(self.app._format_instance_mapping(ctxt,
                                                            instance_ref1),
                          expected)
