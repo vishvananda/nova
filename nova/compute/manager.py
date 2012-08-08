@@ -1717,6 +1717,17 @@ class ComputeManager(manager.SchedulerDependentManager):
         return connection_info
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
+    @wrap_instance_fault
+    def get_unused_device(self, context, instance_uuid):
+
+        @utils.synchronized(instance_uuid)
+        def do_get_next_device():
+            instance_ref = self.db.instance_get_by_uuid(context, instance_uuid)
+            return compute_utils.get_next_device_for_instance(context,
+                                                              instance_ref)
+        return do_get_next_device()
+
+    @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @checks_instance_lock
     @wrap_instance_fault
     def attach_volume(self, context, instance_uuid, volume_id, mountpoint):

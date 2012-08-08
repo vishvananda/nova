@@ -1589,8 +1589,16 @@ class API(BaseAPI):
         self._cast_compute_message('inject_network_info', context, instance)
 
     @wrap_check_policy
-    def attach_volume(self, context, instance, volume_id, device):
+    def attach_volume(self, context, instance, volume_id, device=None):
         """Attach an existing volume to an existing instance."""
+        if not device:
+            # NOTE(vish): This is done on the compute host because we want
+            #             to avoid a race where two devices are requested at
+            #             the same time. When db access is removed from
+            #             compute, the bdm will be created here and we will
+            #             have to make sure that they are assigned atomically.
+            device = self._call_compute_message('get_unused_device', context,
+                                                instance)
         if not re.match("^/dev/x{0,1}[a-z]d[a-z]+$", device):
             raise exception.InvalidDevicePath(path=device)
         volume = self.volume_api.get(context, volume_id)
@@ -1600,6 +1608,7 @@ class API(BaseAPI):
                   "mountpoint": device}
         self._cast_compute_message('attach_volume', context, instance,
                 params=params)
+        return device
 
     # FIXME(comstud): I wonder if API should pull in the instance from
     # the volume ID via volume API and pass it and the volume object here
