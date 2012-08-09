@@ -2621,8 +2621,7 @@ def snapshot_update(context, snapshot_id, values):
 
 
 def _block_device_mapping_get_query(context, session=None):
-    return model_query(context, models.BlockDeviceMapping, session=session,
-                       read_deleted="no")
+    return model_query(context, models.BlockDeviceMapping, session=session)
 
 
 @require_context
