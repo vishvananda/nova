@@ -53,7 +53,7 @@ QUOTAS = quota.QUOTAS
 class SchedulerManager(manager.Manager):
     """Chooses a host to run instances on."""
 
-    RPC_API_VERSION = '1.5'
+    RPC_API_VERSION = '1.6'
 
     def __init__(self, scheduler_driver=None, *args, **kwargs):
         if not scheduler_driver:
@@ -202,7 +202,10 @@ class SchedulerManager(manager.Manager):
 
         vm_state = updates['vm_state']
         properties = request_spec.get('instance_properties', {})
-        instance_uuid = properties.get('uuid', {})
+        # FIXME(comstud): We really need to move error handling closer
+        # to where the errors occur so we can deal with errors on
+        # individual instances when scheduling multiple.
+        instance_uuid = request_spec['instance_uuids'][0]
 
         if instance_uuid:
             state = vm_state.upper()

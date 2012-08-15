@@ -160,26 +160,6 @@ class Scheduler(object):
                 for service in services
                 if utils.service_is_up(service)]
 
-    def create_instance_db_entry(self, context, request_spec, reservations):
-        """Create instance DB entry based on request_spec"""
-        base_options = request_spec['instance_properties']
-        if base_options.get('uuid'):
-            # Instance was already created before calling scheduler
-            return db.instance_get_by_uuid(context, base_options['uuid'])
-        image = request_spec['image']
-        instance_type = request_spec.get('instance_type')
-        security_group = request_spec.get('security_group', 'default')
-        block_device_mapping = request_spec.get('block_device_mapping', [])
-
-        instance = self.compute_api.create_db_entry_for_new_instance(
-                context, instance_type, image, base_options,
-                security_group, block_device_mapping, reservations)
-        # NOTE(comstud): This needs to be set for the generic exception
-        # checking in scheduler manager, so that it'll set this instance
-        # to ERROR properly.
-        base_options['uuid'] = instance['uuid']
-        return instance
-
     def schedule(self, context, topic, method, *_args, **_kwargs):
         """Must override schedule method for scheduler to work."""
         raise NotImplementedError(_("Must implement a fallback schedule"))

@@ -499,25 +499,45 @@ class API(base.Base):
             filter_properties['force_hosts'] = [forced_host]
 
         instances = []
-        for i in xrange(num_instances):
-            options = base_options.copy()
-            instance = self.create_db_entry_for_new_instance(
-                    context, instance_type, image, options,
-                    security_group, block_device_mapping,
-                    quota_reservations)
-            instances.append(instance)
-            # Tells scheduler we created the instance already.
-            options['uuid'] = instance['uuid']
+        instance_uuids = []
+        try:
+            for i in xrange(num_instances):
+                options = base_options.copy()
+                instance = self.create_db_entry_for_new_instance(
+                        context, instance_type, image, options,
+                        security_group, block_device_mapping,
+                        quota_reservations)
+                instances.append(instance)
+                instance_uuids.append(instance['uuid'])
+        except Exception:
+            # Clean up as best we can.
+            with excutils.save_and_reraise_exception():
+                try:
+                    for instance_uuid in instance_uuids:
+                        self.db.instance_destroy(context,
+                                instance_uuid)
+                finally:
+                    if quota_reservations:
+                        QUOTAS.rollback(context, quota_reservations)
 
-            self._schedule_run_instance(
-                    False,
-                    context, options,
-                    instance_type,
-                    availability_zone, injected_files,
-                    admin_password, image,
-                    1, requested_networks,
-                    block_device_mapping, security_group,
-                    filter_properties, None)
+        # Commit the reservations
+        if quota_reservations:
+            QUOTAS.commit(context, quota_reservations)
+
+        request_spec = {
+            'image': jsonutils.to_primitive(image),
+            'instance_properties': base_options,
+            'instance_type': instance_type,
+            'instance_uuids': instance_uuids,
+            'block_device_mapping': block_device_mapping,
+            'security_group': security_group,
+        }
+
+        self.scheduler_rpcapi.run_instance(context,
+                request_spec=request_spec,
+                admin_password=admin_password, injected_files=injected_files,
+                requested_networks=requested_networks, is_first_time=True,
+                filter_properties=filter_properties)
 
         return (instances, reservation_id)
 
@@ -683,7 +703,7 @@ class API(base.Base):
     #NOTE(bcwaldon): No policy check since this is only used by scheduler and
     # the compute api. That should probably be cleaned up, though.
     def create_db_entry_for_new_instance(self, context, instance_type, image,
-            base_options, security_group, block_device_mapping, reservations):
+            base_options, security_group, block_device_mapping):
         """Create an entry in the DB for this new instance,
         including any related table updates (such as security group,
         etc).
@@ -709,14 +729,9 @@ class API(base.Base):
         notifications.send_update_with_states(context, instance, None,
                 vm_states.BUILDING, None, None, service="api")
 
-        # Commit the reservations
-        if reservations:
-            QUOTAS.commit(context, reservations)
-
         return instance
 
     def _schedule_run_instance(self,
-            use_call,
             context, base_options,
             instance_type,
             availability_zone, injected_files,
@@ -739,7 +754,7 @@ class API(base.Base):
             'image': jsonutils.to_primitive(image),
             'instance_properties': base_options,
             'instance_type': instance_type,
-            'num_instances': num_instances,
+            'instance_uuids': insatnce_uuids,
             'block_device_mapping': block_device_mapping,
             'security_group': security_group,
         }
@@ -749,7 +764,7 @@ class API(base.Base):
                 admin_password=admin_password, injected_files=injected_files,
                 requested_networks=requested_networks, is_first_time=True,
                 filter_properties=filter_properties,
-                reservations=quota_reservations, call=use_call)
+                reservations=quota_reservations)
 
     def _check_create_policies(self, context, availability_zone,
             requested_networks, block_device_mapping):
@@ -1522,7 +1537,7 @@ class API(base.Base):
 
         request_spec = {
                 'instance_type': new_instance_type,
-                'num_instances': 1,
+                'instance_uuids': instance['uuid'],
                 'instance_properties': instance}
 
         filter_properties = {'ignore_hosts': []}
