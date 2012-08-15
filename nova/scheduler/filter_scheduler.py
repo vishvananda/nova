@@ -62,7 +62,8 @@ class FilterScheduler(driver.Scheduler):
         Returns a list of the instances created.
         """
         elevated = context.elevated()
-        instance_uuids = request_spec['instance_uuids']
+        instance_uuids = (request_spec.get('instance_uuids') or
+                          [request_spec['instance_properties'].get('uuid')])
         num_instances = len(instance_uuids)
         LOG.debug(_("Attempting to build %(num_instances)d instance(s)") %
                 locals())

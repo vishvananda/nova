@@ -117,7 +117,7 @@ class SchedulerManager(manager.Manager):
 
     def run_instance(self, context, request_spec, admin_password,
             injected_files, requested_networks, is_first_time,
-            filter_properties, reservations, topic=None):
+            filter_properties, reservations=None, topic=None):
         """Tries to call schedule_run_instance on the driver.
         Sets instance vm_state to ERROR on exceptions
         """

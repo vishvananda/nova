@@ -505,8 +505,7 @@ class API(base.Base):
                 options = base_options.copy()
                 instance = self.create_db_entry_for_new_instance(
                         context, instance_type, image, options,
-                        security_group, block_device_mapping,
-                        quota_reservations)
+                        security_group, block_device_mapping)
                 instances.append(instance)
                 instance_uuids.append(instance['uuid'])
         except Exception:
@@ -730,41 +729,6 @@ class API(base.Base):
                 vm_states.BUILDING, None, None, service="api")
 
         return instance
-
-    def _schedule_run_instance(self,
-            context, base_options,
-            instance_type,
-            availability_zone, injected_files,
-            admin_password, image,
-            num_instances,
-            requested_networks,
-            block_device_mapping,
-            security_group,
-            filter_properties,
-            quota_reservations):
-        """Send a run_instance request to the schedulers for processing."""
-
-        pid = context.project_id
-        uid = context.user_id
-
-        LOG.debug(_("Sending create to scheduler for %(pid)s/%(uid)s's") %
-                  locals())
-
-        request_spec = {
-            'image': jsonutils.to_primitive(image),
-            'instance_properties': base_options,
-            'instance_type': instance_type,
-            'instance_uuids': insatnce_uuids,
-            'block_device_mapping': block_device_mapping,
-            'security_group': security_group,
-        }
-
-        return self.scheduler_rpcapi.run_instance(context,
-                request_spec=request_spec,
-                admin_password=admin_password, injected_files=injected_files,
-                requested_networks=requested_networks, is_first_time=True,
-                filter_properties=filter_properties,
-                reservations=quota_reservations)
 
     def _check_create_policies(self, context, availability_zone,
             requested_networks, block_device_mapping):

@@ -65,7 +65,8 @@ class ChanceScheduler(driver.Scheduler):
                               requested_networks, is_first_time,
                               filter_properties, reservations):
         """Create and run an instance or instances"""
-        instance_uuids = request_spec['instance_uuids']
+        instance_uuids = (request_spec.get('instance_uuids') or
+                          [request_spec['instance_properties'].get('uuid')])
         for num, instance_uuid in enumerate(instance_uuids):
             host = self._schedule(context, 'compute', request_spec,
                                   filter_properties)
@@ -79,10 +80,6 @@ class ChanceScheduler(driver.Scheduler):
                     admin_password=admin_password, is_first_time=is_first_time,
                     request_spec=request_spec,
                     filter_properties=filter_properties)
-            # So if we loop around, create_instance_db_entry will actually
-            # create a new entry, instead of assume it's been created
-            # already
-            del request_spec['instance_properties']['uuid']
 
     def schedule_prep_resize(self, context, image, request_spec,
                              filter_properties, instance, instance_type,
