@@ -404,36 +404,24 @@ class API(BaseAPI):
 
         LOG.debug(_("Going to run %s instances...") % num_instances)
 
-        if create_instance_here:
+        instances = []
+        scheduler_options = base_options.copy()
+        for i in xrange(num_instances):
             instance = self.create_db_entry_for_new_instance(
                     context, instance_type, image, base_options,
                     security_group, block_device_mapping)
-            # Tells scheduler we created the instance already.
-            base_options['uuid'] = instance['uuid']
-            rpc_method = rpc.cast
-        else:
-            # We need to wait for the scheduler to create the instance
-            # DB entries, because the instance *could* be # created in
-            # a child zone.
-            rpc_method = rpc.call
+            instances.append(instance)
+            scheduler_options['uuid'] = instance['uuid']
+            self._schedule_run_instance(
+                    rpc.cast,
+                    context, scheduler_options,
+                    instance_type,
+                    availability_zone, injected_files,
+                    admin_password, image,
+                    1, requested_networks,
+                    block_device_mapping, security_group,
+                    filter_properties)
 
-        # TODO(comstud): We should use rpc.multicall when we can
-        # retrieve the full instance dictionary from the scheduler.
-        # Otherwise, we could exceed the AMQP max message size limit.
-        # This would require the schedulers' schedule_run_instances
-        # methods to return an iterator vs a list.
-        instances = self._schedule_run_instance(
-                rpc_method,
-                context, base_options,
-                instance_type,
-                availability_zone, injected_files,
-                admin_password, image,
-                num_instances, requested_networks,
-                block_device_mapping, security_group,
-                filter_properties)
-
-        if create_instance_here:
-            return ([instance], reservation_id)
         return (instances, reservation_id)
 
     @staticmethod
