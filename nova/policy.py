@@ -94,13 +94,13 @@ def enforce(context, action, target):
                    exception.PolicyNotAuthorized, action=action)
 
 
-def check_admin_role(roles):
+def check_is_admin(roles):
     """Whether or not roles contains 'admin' role according to policy setting.
 
     """
     init()
 
-    action = 'admin'
+    action = 'context_is_admin'
     match_list = ('rule:%s' % action,)
     target = {}
     credentials = {'roles': roles}
