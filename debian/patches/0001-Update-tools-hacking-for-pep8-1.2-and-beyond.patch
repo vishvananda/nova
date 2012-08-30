@@ -1,0 +1,92 @@
+From 54ad73dd9a9cf429e36d4a5288206adb308aa367 Mon Sep 17 00:00:00 2001
+From: Joe Gordon <jogo@cloudscaling.com>
+Date: Mon, 9 Jul 2012 16:03:14 -0700
+Subject: [PATCH] Update tools hacking for pep8 1.2 and beyond
+
+Based on https://github.com/jcrocholl/pep8/commit/b9f72b16011aac981ce9e3a47fd0ffb1d3d2e085
+
+Change-Id: Icd776edd1d7b9987833167dcf04015109ffc7c17
+---
+ tools/hacking.py    |   12 +++++++-----
+ tools/test-requires |    2 +-
+ tox.ini             |    4 ++--
+ 3 files changed, 10 insertions(+), 8 deletions(-)
+
+Index: nova-2012.2/tools/hacking.py
+===================================================================
+--- nova-2012.2.orig/tools/hacking.py	2012-08-06 12:23:06.000000000 -0700
++++ nova-2012.2/tools/hacking.py	2012-08-06 12:23:40.621307381 -0700
+@@ -137,7 +137,7 @@
+     N201
+     """
+     if logical_line.startswith("except:"):
+-        return 6, "NOVA N201: no 'except:' at least use 'except Exception:'"
++        yield 6, "NOVA N201: no 'except:' at least use 'except Exception:'"
+ 
+ 
+ def nova_except_format_assert(logical_line):
+@@ -148,7 +148,7 @@
+     N202
+     """
+     if logical_line.startswith("self.assertRaises(Exception"):
+-        return 1, "NOVA N202: assertRaises Exception too broad"
++        yield 1, "NOVA N202: assertRaises Exception too broad"
+ 
+ 
+ def nova_one_import_per_line(logical_line):
+@@ -166,7 +166,7 @@
+     if (pos > -1 and (parts[0] == "import" or
+                       parts[0] == "from" and parts[2] == "import") and
+         not is_import_exception(parts[1])):
+-        return pos, "NOVA N301: one import per line"
++        yield pos, "NOVA N301: one import per line"
+ 
+ _missingImport = set([])
+ 
+@@ -240,7 +240,9 @@
+             (len(split_line) == 2 or
+             (len(split_line) == 4 and split_line[2] == "as"))):
+         mod = split_line[1]
+-        return importModuleCheck(mod)
++        rval = importModuleCheck(mod)
++        if rval != None:
++            yield rval
+ 
+     # TODO(jogo) handle "from x import *"
+ 
+@@ -397,7 +399,7 @@
+         map(gen.send, tokens)
+         gen.close()
+     except LocalizationError as e:
+-        return e.args
++        yield e.args
+ 
+ #TODO(jogo) Dict and list objects
+ 
+Index: nova-2012.2/tools/test-requires
+===================================================================
+--- nova-2012.2.orig/tools/test-requires	2012-08-06 12:23:06.000000000 -0700
++++ nova-2012.2/tools/test-requires	2012-08-06 12:23:40.621307381 -0700
+@@ -5,5 +5,5 @@
+ mox==0.5.3
+ nose
+ openstack.nose_plugin>=0.7
+-pep8==1.1
++pep8==1.2
+ sphinx>=1.1.2
+Index: nova-2012.2/tox.ini
+===================================================================
+--- nova-2012.2.orig/tox.ini	2012-08-06 12:23:06.000000000 -0700
++++ nova-2012.2/tox.ini	2012-08-06 12:24:27.929305640 -0700
+@@ -17,9 +17,9 @@
+ downloadcache = ~/cache/pip
+ 
+ [testenv:pep8]
+-deps=pep8==1.0.1
++deps = pep8==1.2
+ commands =
+-  python tools/hacking.py --ignore=N4 --repeat --show-source \
++  python tools/hacking.py --ignore=N4,E12 --repeat --show-source \
+     --exclude=.venv,.tox,dist,doc,*openstack/common*,*lib/python*,*egg .
+ 
+ [testenv:cover]
