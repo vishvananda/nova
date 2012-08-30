@@ -72,12 +72,12 @@ class ApiSampleTestBase(integrated_helpers._IntegratedTestBase):
         parts.append(name + "." + cls.ctype + suffix)
         return os.path.join(*parts)
 
-    @classmethod
-    def _get_template(cls, name):
-        return cls._get_sample(name, suffix='.tpl')
-
     def _read_template(self, name):
-        with open(self._get_template(name)) as inf:
+        template = self._get_sample(name, suffix='.tpl')
+        if self.generate_samples and not os.path.exists(template):
+            with open(template, 'w') as outf:
+                pass
+        with open(template) as inf:
             return inf.read().strip()
 
     def _write_sample(self, name, data):
@@ -198,3 +198,28 @@ class ExtensionsSampleJsonTest(ApiSampleTestBase):
 
 class ExtensionsSampleXmlTest(ExtensionsSampleJsonTest):
     ctype = 'xml'
+
+
+class FlavorsSampleJsonTest(ApiSampleTestBase):
+
+    def test_flavors_get(self):
+        response = self._do_get('flavors/1')
+        subs = self._get_regexes()
+        return self._verify_response('flavors-get-resp', subs, response)
+
+    def test_flavors_list(self):
+        response = self._do_get('flavors')
+        subs = self._get_regexes()
+        return self._verify_response('flavors-list-resp', subs, response)
+
+
+class FlavorsSampleXmlTest(FlavorsSampleJsonTest):
+    ctype = 'xml'
+
+
+class FlavorsSampleAllExtensionJsonTest(FlavorsSampleJsonTest):
+    all_extensions = True
+
+
+class FlavorsSampleAllExtensionXmlTest(FlavorsSampleXmlTest):
+    all_extensions = True
