@@ -1,0 +1,138 @@
+From 742e5512dbee26080f14490292d50278d59f10ac Mon Sep 17 00:00:00 2001
+From: Chuck Short <chuck.short@canonical.com>
+Date: Thu, 29 Mar 2012 13:10:22 -0400
+Subject: [PATCH] Monitor console.log for indefinite growth
+
+Using the libvirt serial console, everything
+that is dumped into a console.log file, this file can
+keep on growing depending on what the user is doing in the console.
+
+This patch adds add a new flag called "use_console_monitor",
+the console monitor will check the instance's console.log size.
+If it goes past a certain amount it will warn in the nova-compute.log
+file that it is growing and when was the file last modified.
+
+This bug does not entirely fix bug 832507, but it is a stop
+gap measure until we can resolve it properly in libvirt
+or qemu-kvm.
+
+Change-Id: I00ebc716dccbe9fb97e2b8a3cb5d5e496bc7719b
+Signed-off-by: Chuck Short <chuck.short@canonical.com>
+---
+ nova/compute/manager.py         |   24 +++++++++++++++++++++++-
+ nova/tests/test_compute.py      |    9 +++++++++
+ nova/virt/driver.py             |   11 +++++++++++
+ nova/virt/libvirt/connection.py |   13 +++++++++++++
+ 4 files changed, 56 insertions(+), 1 deletions(-)
+
+diff --git a/nova/compute/manager.py b/nova/compute/manager.py
+index 48e135b..c5a4bb3 100644
+--- a/nova/compute/manager.py
++++ b/nova/compute/manager.py
+@@ -118,7 +118,13 @@ compute_opts = [
+     cfg.IntOpt("heal_instance_info_cache_interval",
+                default=60,
+                help="Number of seconds between instance info_cache self "
+-                        "healing updates")
++                        "healing updates"),
++    cfg.BoolOpt("use_console_monitor",
++                default=False,
++                help="Use scheduler to monitor the console.log."),
++    cfg.IntOpt("console_threshold_size",
++                default=104857600,
++                help="Max console.log size.")
+     ]
+ 
+ FLAGS = flags.FLAGS
+@@ -2393,6 +2399,22 @@ class ComputeManager(manager.SchedulerDependentManager):
+                 self._delete_instance(context, instance)
+ 
+     @manager.periodic_task
++    def run_console_monitor(self, context):
++        """Monitor the console.log size for a given instance."""
++        if not FLAGS.use_console_monitor:
++            return
++
++        try:
++            LOG.info(_('Running console monitor'))
++            instances = self.db.instance_get_all_by_host(context, self.host)
++            for instance in instances:
++                drv_state = self._get_power_state(context, instance)
++                if drv_state == power_state.RUNNING:
++                    self.driver.monitor_console_log(instance)
++        except NotImplementedError:
++            pass
++
++    @manager.periodic_task
+     def update_available_resource(self, context):
+         """See driver.update_available_resource()
+ 
+diff --git a/nova/tests/test_compute.py b/nova/tests/test_compute.py
+index 305282c..53dd08f 100644
+--- a/nova/tests/test_compute.py
++++ b/nova/tests/test_compute.py
+@@ -744,6 +744,15 @@ class ComputeTestCase(BaseTestCase):
+         self.assertEqual(output, 'ANOTHER\nLAST LINE')
+         self.compute.terminate_instance(self.context, instance['uuid'])
+ 
++    def test_console_monitor(self):
++        """Make sure we can montior console from instance"""
++        self.flags(use_console_monitor=True)
++        context = self.context.elevated()
++        instance = self._create_fake_instance()
++        self.compute.run_instance(context, instance['uuid'])
++        self.compute.run_console_monitor(context)
++        self.compute.terminate_instance(self.context, instance['uuid'])
++
+     def test_novnc_vnc_console(self):
+         """Make sure we can a vnc console for an instance."""
+         instance = self._create_fake_instance()
+diff --git a/nova/virt/driver.py b/nova/virt/driver.py
+index 9658273..e0a0ca1 100644
+--- a/nova/virt/driver.py
++++ b/nova/virt/driver.py
+@@ -663,6 +663,17 @@ class ComputeDriver(object):
+         related to other calls into the driver. The prime example is to clean
+         the cache and remove images which are no longer of interest.
+         """
++        pass
++
++    def monitor_console_log(self, instance):
++        """
++        Manage the drivers console.log
++
++        Some drives just dump the serial console to a file. This method
++        monitors the console.log, so the console.log file can remain
++        managable.
++        """
++        pass
+ 
+     def add_to_aggregate(self, context, aggregate, host, **kwargs):
+         """Add a compute host to an aggregate."""
+diff --git a/nova/virt/libvirt/connection.py b/nova/virt/libvirt/connection.py
+index 3c4bbb0..10e4cf1 100644
+--- a/nova/virt/libvirt/connection.py
++++ b/nova/virt/libvirt/connection.py
+@@ -2434,6 +2434,19 @@ class LibvirtConnection(driver.ComputeDriver):
+         """Manage the local cache of images."""
+         self.image_cache_manager.verify_base_images(context)
+ 
++    def monitor_console_log(self, instance):
++        console_log_file = os.path.join(FLAGS.instances_path,
++                                   instance['name'],
++                                   'console.log')
++        if os.path.exists(console_log_file):
++            stat = os.stat(console_log_file)
++            if stat.st_size >= FLAGS.console_threshold_size:
++                size = stat.st_size
++                file_acess_time = stat.st_mtime
++                LOG.warn(_('console.log size: %(size)s bytes, '
++                           'last accessed: %(file_acess_time)s.')
++                         % locals(), instance=instance)
++
+     @exception.wrap_exception()
+     def migrate_disk_and_power_off(self, context, instance, dest,
+                                    instance_type, network_info):
+-- 
+1.7.9.1
+
