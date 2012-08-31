@@ -11,7 +11,6 @@ Build-Depends-Indep:
  openssh-client,
  openssl,
  python-setuptools,
- python-setuptools-git,
  python-sphinx (>> 1.0),
  python-distutils-extra,
  python-gflags,
