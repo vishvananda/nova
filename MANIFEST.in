@@ -2,5 +2,5 @@ include AUTHORS
 include ChangeLog
 exclude .gitignore
 exclude .gitreview
-recursive-include nova *.cfg *.sql *.sh
+recursive-include nova *.cfg *.sql *.sh *.tmpl
 global-exclude *.pyc
