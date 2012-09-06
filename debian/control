@@ -46,6 +46,7 @@ Build-Depends-Indep:
  python-kombu,
  python-quantumclient,
  python-glanceclient,
+ python-cinderclient,
  pep8
 Build-Conflicts: python-cjson
 Standards-Version: 3.9.3
@@ -82,6 +83,7 @@ Depends: ${python:Depends},
  python-netaddr,
  python-glance,
  python-glanceclient,
+ python-cinderclient,
  python-novaclient,
  python-simplejson,
  python-lxml,
