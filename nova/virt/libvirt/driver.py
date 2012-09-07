@@ -486,7 +486,7 @@ class LibvirtDriver(driver.ComputeDriver):
                 try:
                     virt_dom.undefineFlags(
                         libvirt.VIR_DOMAIN_UNDEFINE_MANAGED_SAVE)
-                except libvirt.libvirtError as e:
+                except (AttributeError, libvirt.libvirtError):
                     LOG.debug(_("Error from libvirt during undefineFlags."
                         " Retrying with undefine"), instance=instance)
                     virt_dom.undefine()
