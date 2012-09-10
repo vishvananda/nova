@@ -1681,8 +1681,6 @@ class NetworkManager(manager.SchedulerDependentManager):
 
         network_uuids = [uuid for (uuid, fixed_ip) in networks]
 
-        self._get_networks_by_uuids(context, network_uuids)
-
         for network_uuid, address in networks:
             # check if the fixed IP address is valid and
             # it actually belongs to the network
@@ -1704,9 +1702,6 @@ class NetworkManager(manager.SchedulerDependentManager):
 
     def _get_network_by_id(self, context, network_id):
         return self.db.network_get(context, network_id)
-
-    def _get_networks_by_uuids(self, context, network_uuids):
-        return self.db.network_get_all_by_uuids(context, network_uuids)
 
     @wrap_check_policy
     def get_vifs_by_instance(self, context, instance_id):
