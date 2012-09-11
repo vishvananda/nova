@@ -1,0 +1,4 @@
+/var/log/nova/nova-novncproxy.log {
+    daily
+    missingok
+}
