@@ -202,7 +202,8 @@ class FlatNetworkTestCase(test.TestCase):
         requested_networks = [('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
                                '192.168.1.100')]
         db.network_get(mox.IgnoreArg(),
-                       mox.IgnoreArg()).AndReturn(networks[1])
+                       mox.IgnoreArg(),
+                       project_only=mox.IgnoreArg()).AndReturn(networks[0])
 
         ip = fixed_ips[1].copy()
         ip['instance_uuid'] = None
@@ -279,7 +280,8 @@ class FlatNetworkTestCase(test.TestCase):
                                    mox.IgnoreArg(),
                                    mox.IgnoreArg()).AndReturn('192.168.0.101')
         db.network_get(mox.IgnoreArg(),
-                       mox.IgnoreArg()).AndReturn(networks[0])
+                       mox.IgnoreArg(),
+                       project_only=mox.IgnoreArg()).AndReturn(networks[0])
         db.network_update(mox.IgnoreArg(), mox.IgnoreArg(), mox.IgnoreArg())
         self.mox.ReplayAll()
         self.network.add_fixed_ip_to_instance(self.context, 1, HOST,
@@ -377,7 +379,8 @@ class FlatNetworkTestCase(test.TestCase):
                                    mox.IgnoreArg(),
                                    mox.IgnoreArg()).AndReturn(fixedip)
         db.network_get(mox.IgnoreArg(),
-                       mox.IgnoreArg()).AndReturn(networks[0])
+                       mox.IgnoreArg(),
+                       project_only=mox.IgnoreArg()).AndReturn(networks[0])
         db.network_update(mox.IgnoreArg(), mox.IgnoreArg(), mox.IgnoreArg())
 
         self.mox.ReplayAll()
@@ -477,7 +480,7 @@ class VlanNetworkTestCase(test.TestCase):
                           cidr='192.168.0.1/24', network_size=100)
 
     def test_validate_networks(self):
-        def network_get(_context, network_id):
+        def network_get(_context, network_id, project_only='allow_none'):
             return networks[network_id]
 
         self.stubs.Set(db, 'network_get', network_get)
@@ -846,7 +849,8 @@ class VlanNetworkTestCase(test.TestCase):
                                    mox.IgnoreArg(),
                                    mox.IgnoreArg()).AndReturn('192.168.0.101')
         db.network_get(mox.IgnoreArg(),
-                       mox.IgnoreArg()).AndReturn(networks[0])
+                       mox.IgnoreArg(),
+                       project_only=mox.IgnoreArg()).AndReturn(networks[0])
         self.mox.ReplayAll()
         self.network.add_fixed_ip_to_instance(self.context, 1, HOST,
                                               networks[0]['id'])
@@ -855,7 +859,7 @@ class VlanNetworkTestCase(test.TestCase):
         """Makes sure that we cannot deallocaate or disassociate
         a public ip of other project"""
 
-        def network_get(_context, network_id):
+        def network_get(_context, network_id, project_only="allow_none"):
             return networks[network_id]
 
         self.stubs.Set(db, 'network_get', network_get)
@@ -908,7 +912,7 @@ class VlanNetworkTestCase(test.TestCase):
 
         Ensures https://bugs.launchpad.net/nova/+bug/973442 doesn't return"""
 
-        def network_get(_context, network_id):
+        def network_get(_context, network_id, project_only="allow_none"):
             return networks[network_id]
 
         self.stubs.Set(db, 'network_get', network_get)
@@ -941,7 +945,7 @@ class VlanNetworkTestCase(test.TestCase):
     def test_deallocate_fixed_deleted(self):
         """Verify doesn't deallocate deleted fixed_ip from deleted network"""
 
-        def network_get(_context, network_id):
+        def network_get(_context, network_id, project_only="allow_none"):
             return networks[network_id]
 
         def teardown_network_on_host(_context, network):
@@ -979,7 +983,7 @@ class VlanNetworkTestCase(test.TestCase):
 
         Ensures https://bugs.launchpad.net/nova/+bug/968457 doesn't return"""
 
-        def network_get(_context, network_id):
+        def network_get(_context, network_id, project_only="allow_none"):
             return networks[network_id]
 
         self.stubs.Set(db, 'network_get', network_get)
@@ -1004,7 +1008,7 @@ class VlanNetworkTestCase(test.TestCase):
 
     def test_fixed_ip_cleanup_fail(self):
         """Verify IP is not deallocated if the security group refresh fails."""
-        def network_get(_context, network_id):
+        def network_get(_context, network_id, project_only="allow_none"):
             return networks[network_id]
 
         self.stubs.Set(db, 'network_get', network_get)

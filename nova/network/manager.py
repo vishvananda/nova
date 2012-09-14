@@ -1701,7 +1701,8 @@ class NetworkManager(manager.SchedulerDependentManager):
                         instance_uuid=fixed_ip_ref['instance_uuid'])
 
     def _get_network_by_id(self, context, network_id):
-        return self.db.network_get(context, network_id)
+        return self.db.network_get(context, network_id,
+                                   project_only="allow_none")
 
     @wrap_check_policy
     def get_vifs_by_instance(self, context, instance_id):
@@ -1900,10 +1901,6 @@ class FlatDHCPManager(RPCAllocateFixedIP, FloatingIP, NetworkManager):
             dev = self.driver.get_dev(network)
             self.driver.update_dhcp(context, dev, network)
 
-    def _get_network_by_id(self, context, network_id):
-        return NetworkManager._get_network_by_id(self, context.elevated(),
-                                                 network_id)
-
     def _get_network_dict(self, network):
         """Returns the dict representing necessary and meta network fields"""
 
@@ -1991,6 +1988,12 @@ class VlanManager(RPCAllocateFixedIP, FloatingIP, NetworkManager):
             network_id = None
         self.db.network_associate(context, project_id, network_id, force=True)
 
+    def _get_network_by_id(self, context, network_id):
+        # NOTE(vish): Don't allow access to networks with project_id=None as
+        #             these are networksa that haven't been allocated to a
+        #             project yet.
+        return self.db.network_get(context, network_id, project_only=True)
+
     def _get_networks_for_instance(self, context, instance_id, project_id,
                                    requested_networks=None):
         """Determine which networks an instance should connect to."""
@@ -2058,10 +2061,6 @@ class VlanManager(RPCAllocateFixedIP, FloatingIP, NetworkManager):
             network['dhcp_server'] = self._get_dhcp_ip(context, network)
             dev = self.driver.get_dev(network)
             self.driver.update_dhcp(context, dev, network)
-
-    def _get_networks_by_uuids(self, context, network_uuids):
-        return self.db.network_get_all_by_uuids(context, network_uuids,
-                                                     context.project_id)
 
     def _get_network_dict(self, network):
         """Returns the dict representing necessary and meta network fields"""

@@ -188,20 +188,21 @@ def require_aggregate_exists(f):
     return wrapper
 
 
-def model_query(context, *args, **kwargs):
+def model_query(context, model, *args, **kwargs):
     """Query helper that accounts for context's `read_deleted` field.
 
     :param context: context to query under
     :param session: if present, the session to use
     :param read_deleted: if present, overrides context's read_deleted field.
     :param project_only: if present and context is user-type, then restrict
-            query to match the context's project_id.
+            query to match the context's project_id. If set to 'allow_none',
+            restriction includes project_id = None.
     """
     session = kwargs.get('session') or get_session()
     read_deleted = kwargs.get('read_deleted') or context.read_deleted
-    project_only = kwargs.get('project_only')
+    project_only = kwargs.get('project_only', False)
 
-    query = session.query(*args)
+    query = session.query(model, *args)
 
     if read_deleted == 'no':
         query = query.filter_by(deleted=False)
@@ -213,8 +214,12 @@ def model_query(context, *args, **kwargs):
         raise Exception(
                 _("Unrecognized read_deleted value '%s'") % read_deleted)
 
-    if project_only and is_user_context(context):
-        query = query.filter_by(project_id=context.project_id)
+    if is_user_context(context) and project_only:
+        if project_only == 'allow_none':
+            query = query.filter(or_(model.project_id == context.project_id,
+                                     model.project_id == None))
+        else:
+            query = query.filter_by(project_id=context.project_id)
 
     return query
 
@@ -2100,9 +2105,9 @@ def network_disassociate(context, network_id):
 
 
 @require_context
-def network_get(context, network_id, session=None):
+def network_get(context, network_id, session=None, project_only='allow_none'):
     result = model_query(context, models.Network, session=session,
-                         project_only=True).\
+                         project_only=project_only).\
                     filter_by(id=network_id).\
                     first()
 
