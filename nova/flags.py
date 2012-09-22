@@ -419,6 +419,9 @@ global_opts = [
                 help='Whether to batch up the application of IPTables rules'
                      ' during a host restart and apply all at the end of the'
                      ' init phase'),
+    cfg.BoolOpt('force_volume_boot',
+                default=False,
+                help='Whether to force all instances to boot from volume'),
 ]
 
 FLAGS.register_opts(global_opts)
