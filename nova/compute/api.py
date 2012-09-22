@@ -440,6 +440,24 @@ class API(base.Base):
         availability_zone, forced_host = self._handle_availability_zone(
                 availability_zone)
 
+        if (FLAGS.default_volume_boot and
+            not block_device_mapping and
+            not image['properties'].get('block_device_mapping')):
+            size = instance_type['root_gb']
+            if not size:
+                GB = 1048576 * 1024
+                size = (int(image['size']) + GB - 1) / GB
+            volume = self.volume_api.create(context, size, 'root', '',
+                                            image_id=image_id)
+            while True:
+                volume = self.volume_api.get(context, volume['id'])
+                if volume['status'] != 'creating':
+                    break
+                time.sleep(1)
+            block_device_mapping.append({'volume_id': volume['id'],
+                                         'device_name': '/dev/vda',
+                                         'delete_on_termination': True})
+
         base_options = {
             'reservation_id': reservation_id,
             'image_ref': image_href,
