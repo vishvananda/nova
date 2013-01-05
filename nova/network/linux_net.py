@@ -634,18 +634,29 @@ def ensure_vpn_forward(public_ip, port, private_ip):
     iptables_manager.apply()
 
 
-def ensure_floating_forward(floating_ip, fixed_ip, device):
+def ensure_floating_forward(floating_ip, fixed_ip, device, network):
     """Ensure floating ip forwarding rule."""
     for chain, rule in floating_forward_rules(floating_ip, fixed_ip, device):
         iptables_manager.ipv4['nat'].add_rule(chain, rule)
     iptables_manager.apply()
+    if device != network['bridge']:
+        ensure_ebtables_rules(floating_ebtables_rules(fixed_ip, network))
 
 
-def remove_floating_forward(floating_ip, fixed_ip, device):
+def remove_floating_forward(floating_ip, fixed_ip, device, network):
     """Remove forwarding for floating ip."""
     for chain, rule in floating_forward_rules(floating_ip, fixed_ip, device):
         iptables_manager.ipv4['nat'].remove_rule(chain, rule)
     iptables_manager.apply()
+    if device != network['bridge']:
+        remove_ebtables_rules(floating_ebtables_rules(fixed_ip, network))
+
+
+def floating_ebtables_rules(fixed_ip, network):
+    """Makes sure only in-network traffic is bridged"""
+    return ['-t nat -I PREROUTING --logical-in %s -p ipv4 --ip-src %s '
+            '! --ip-dst %s -j redirect --redirect-target ACCEPT' %
+            (network['bridge'], fixed_ip, network['cidr'])]
 
 
 def floating_forward_rules(floating_ip, fixed_ip, device):
