@@ -22,10 +22,12 @@ import inspect
 
 from nova.db import base
 from nova import exception
+from nova.network import floating_ips
 from nova.network import model as network_model
 from nova.network import rpcapi as network_rpcapi
 from nova.openstack.common import log as logging
 from nova import policy
+from nova import servicegroup
 
 LOG = logging.getLogger(__name__)
 
@@ -95,7 +97,7 @@ def check_policy(context, action):
     policy.enforce(context, _action, target)
 
 
-class API(base.Base):
+class API(base.Base, floating_ips.FloatingIP):
     """API for doing networking via the nova-network network manager.
 
     This is a pluggable module - other implementations do networking via
@@ -106,6 +108,11 @@ class API(base.Base):
 
     def __init__(self, **kwargs):
         self.network_rpcapi = network_rpcapi.NetworkAPI()
+        # NOTE(vish): setting the host to none ensures that the actual
+        #             l3driver commands for l3 are done via rpc.
+        self.host = None
+        self.servicegroup_api = servicegroup.API()
+
         super(API, self).__init__(**kwargs)
 
     @wrap_check_policy
@@ -188,19 +195,15 @@ class API(base.Base):
     @wrap_check_policy
     def allocate_floating_ip(self, context, pool=None):
         """Adds (allocates) a floating ip to a project from a pool."""
-        # NOTE(vish): We don't know which network host should get the ip
-        #             when we allocate, so just send it to any one.  This
-        #             will probably need to move into a network supervisor
-        #             at some point.
-        return self.network_rpcapi.allocate_floating_ip(context,
-                context.project_id, pool, False)
+        return super(API, self).allocate_floating_ip(context,
+                 context.project_id, False, pool)
 
     @wrap_check_policy
     def release_floating_ip(self, context, address,
                             affect_auto_assigned=False):
         """Removes (deallocates) a floating ip with address from a project."""
-        return self.network_rpcapi.deallocate_floating_ip(context, address,
-                affect_auto_assigned)
+        return super(API, self).deallocate_floating_ip(context, address,
+                                                       affect_auto_assigned)
 
     @wrap_check_policy
     @refresh_cache
@@ -209,9 +212,12 @@ class API(base.Base):
                               affect_auto_assigned=False):
         """Associates a floating ip with a fixed ip.
 
-        ensures floating ip is allocated to the project in context
+        Ensures floating ip is allocated to the project in context.
+        Does not verify ownership of the fixed ip. Caller is assumed to have
+        checked that the instance is properly owned.
+
         """
-        orig_instance_uuid = self.network_rpcapi.associate_floating_ip(context,
+        orig_instance_uuid = super(API, self).associate_floating_ip(context,
                 floating_address, fixed_address, affect_auto_assigned)
 
         if orig_instance_uuid:
@@ -230,8 +236,8 @@ class API(base.Base):
     def disassociate_floating_ip(self, context, instance, address,
                                  affect_auto_assigned=False):
         """Disassociates a floating ip from fixed ip it is associated with."""
-        self.network_rpcapi.disassociate_floating_ip(context, address,
-                affect_auto_assigned)
+        return super(API, self).disassociate_floating_ip(context, address,
+                                                         affect_auto_assigned)
 
     @wrap_check_policy
     @refresh_cache
@@ -247,6 +253,10 @@ class API(base.Base):
             NB: macs is ignored by nova-network.
         :returns: network info as from get_instance_nw_info() below
         """
+        # NOTE(vish): We can't do the floating ip allocation here because
+        #             this is called from compute.manager which shouldn't
+        #             have db access so we do it on the other side of the
+        #             rpc.
         args = {}
         args['vpn'] = vpn
         args['requested_networks'] = requested_networks
@@ -262,7 +272,10 @@ class API(base.Base):
     @wrap_check_policy
     def deallocate_for_instance(self, context, instance):
         """Deallocates all network structures related to instance."""
-
+        # NOTE(vish): We can't do the floating ip deallocation here because
+        #             this is called from compute.manager which shouldn't
+        #             have db access so we do it on the other side of the
+        #             rpc.
         args = {}
         args['instance_id'] = instance['id']
         args['project_id'] = instance['project_id']
