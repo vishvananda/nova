@@ -666,6 +666,7 @@ def certificate_get_all_by_user_and_project(context, user_id, project_id):
 def floating_ip_get(context, id):
     result = model_query(context, models.FloatingIp, project_only=True).\
                  filter_by(id=id).\
+                 options(joinedload_all('fixed_ip.instance')).\
                  first()
 
     if not result:
@@ -880,6 +881,7 @@ def floating_ip_get_all_by_project(context, project_id):
     return _floating_ip_get_all(context).\
                          filter_by(project_id=project_id).\
                          filter_by(auto_assigned=False).\
+                         options(joinedload_all('fixed_ip.instance')).\
                          all()
 
 
