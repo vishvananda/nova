@@ -398,7 +398,7 @@ class IptablesFirewallDriver(FirewallDriver):
                         #                 and should be the only one making
                         #                 making rpc calls.
                         nw_api = network.API()
-                        for instance in rule['grantee_group']['instances']:
+                        for instance in rule['instances']:
                             nw_info = nw_api.get_instance_nw_info(ctxt,
                                                                   instance)
 
