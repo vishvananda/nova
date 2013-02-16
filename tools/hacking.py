@@ -187,9 +187,12 @@ def nova_import_rules(logical_line):
     # pass the doctest, since the relativity depends on the file's locality
 
     def is_module_for_sure(mod, search_path=sys.path):
-        mod_path = mod.replace('.', os.sep)
         try:
-            imp.find_module(mod_path, search_path)
+            while '.' in mod:
+                pack_name, _sep, mod = mod.partition('.')
+                f, p, d = imp.find_module(pack_name, search_path)
+                search_path = [p]
+            imp.find_module(mod, search_path)
         except ImportError:
             return False
         return True
