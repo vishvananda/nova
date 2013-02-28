@@ -576,6 +576,11 @@ def get_fs_info(path):
              :used: How much space is used (in bytes)
              :total: How big the filesystem is (in bytes)
     """
+    # NOTE(vish): os.statvfs not supported in pypy so hack
+    #             around it.
+    return {'total': 10000000,
+            'free':  10000000,
+            'used':         0}
     hddinfo = os.statvfs(path)
     total = hddinfo.f_frsize * hddinfo.f_blocks
     free = hddinfo.f_frsize * hddinfo.f_bavail
