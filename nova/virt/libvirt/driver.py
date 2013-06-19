@@ -45,8 +45,10 @@ import eventlet
 import functools
 import glob
 import os
+import re
 import shutil
 import socket
+import struct
 import sys
 import tempfile
 import threading
@@ -1142,7 +1144,47 @@ class LibvirtDriver(driver.ComputeDriver):
                              instance=instance)
                     raise exception.InterfaceDetachFailed(instance)
 
-    def snapshot(self, context, instance, image_href, update_task_state):
+    def live_snapshot(self, context, instance, image_href, update_task_state):
+        """Create a live snapshot from a running VM instance.
+
+        This command only works with qemu 0.14+
+        """
+        if CONF.libvirt_type != 'qemu' and CONF.libvirt_type != 'kvm':
+            raise NotImplementedError()
+
+        try:
+            virt_dom = self._lookup_by_name(instance['name'])
+        except exception.InstanceNotFound:
+            raise exception.InstanceNotRunning(instance_id=instance['uuid'])
+
+        # NOTE(vish): If the instance is suspended, we need to resume before
+        #             doing the managed save, since libvirt manages the save
+        #             file. If we switch suspend/resume to use a virDomin.save
+        #             then we can remove this.
+        if virt_dom.hasManagedSaveImage(0):
+            self.resume()
+
+        _serv, image_id = glance.get_remote_image_service(context, image_href)
+        snapshot_name = 'disk'
+
+        snapshot_directory = CONF.libvirt_snapshots_directory
+        fileutils.ensure_tree(snapshot_directory)
+        with utils.tempdir(dir=snapshot_directory) as tmpdir:
+            memory_file = os.path.join(tmpdir, 'memory')
+
+            def format_live(out_path, metadata):
+                live_path = '%s.live' % out_path
+                imagebackend.create_live_container(live_path, out_path,
+                                                   memory_file)
+                metadata['container_format'] = 'ovf'
+                return live_path, metadata
+
+            self._snapshot(context, virt_dom, instance, image_href,
+                           update_task_state, snapshot_name,
+                           memory_file, format_live)
+
+    def snapshot(self, context, instance, image_href, update_task_state,
+                 save_file=None, output_formatter=None):
         """Create snapshot from a running VM instance.
 
         This command only works with qemu 0.14+
@@ -1151,24 +1193,16 @@ class LibvirtDriver(driver.ComputeDriver):
             virt_dom = self._lookup_by_name(instance['name'])
         except exception.InstanceNotFound:
             raise exception.InstanceNotRunning(instance_id=instance['uuid'])
+        snapshot_name = uuid.uuid4().hex
+        self._snapshot(context, virt_dom, instance, image_href,
+                       update_task_state, snapshot_name)
 
-        (image_service, image_id) = glance.get_remote_image_service(
-            context, instance['image_ref'])
-        try:
-            base = image_service.show(context, image_id)
-        except exception.ImageNotFound:
-            base = {}
-
-        _image_service = glance.get_remote_image_service(context, image_href)
-        snapshot_image_service, snapshot_image_id = _image_service
-        snapshot = snapshot_image_service.show(context, snapshot_image_id)
-
+    def _snapshot(self, context, virt_dom, instance, image_href, update_task_state,
+                  snapshot_name, save_file=None, output_formatter=None):
         metadata = {'is_public': False,
                     'status': 'active',
-                    'name': snapshot['name'],
                     'properties': {
                                    'kernel_id': instance['kernel_id'],
-                                   'image_location': 'snapshot',
                                    'image_state': 'available',
                                    'owner_id': instance['project_id'],
                                    'ramdisk_id': instance['ramdisk_id'],
@@ -1184,6 +1218,13 @@ class LibvirtDriver(driver.ComputeDriver):
         if image_format == 'lvm':
             image_format = 'raw'
 
+        (image_service, image_id) = glance.get_remote_image_service(
+            context, instance['image_ref'])
+        try:
+            base = image_service.show(context, image_id)
+        except exception.ImageNotFound:
+            base = {}
+
         # NOTE(vish): glance forces ami disk format to be ami
         if base.get('disk_format') == 'ami':
             metadata['disk_format'] = 'ami'
@@ -1192,44 +1233,42 @@ class LibvirtDriver(driver.ComputeDriver):
 
         metadata['container_format'] = base.get('container_format', 'bare')
 
-        snapshot_name = uuid.uuid4().hex
-
         (state, _max_mem, _mem, _cpus, _t) = virt_dom.info()
         state = LIBVIRT_POWER_STATE[state]
 
         # NOTE(rmk): Live snapshots require QEMU 1.3 and Libvirt 1.0.0.
         #            These restrictions can be relaxed as other configurations
         #            can be validated.
-        if self.has_min_version(MIN_LIBVIRT_LIVESNAPSHOT_VERSION,
-                                MIN_QEMU_LIVESNAPSHOT_VERSION,
-                                REQ_HYPERVISOR_LIVESNAPSHOT) \
-                and not source_format == "lvm":
-            live_snapshot = True
-        else:
-            live_snapshot = False
-
-        # NOTE(rmk): We cannot perform live snapshots when a managedSave
+        # NOTE(rmk): We cannot perform warm snapshots when a managedSave
         #            file is present, so we will use the cold/legacy method
         #            for instances which are shutdown.
-        if state == power_state.SHUTDOWN:
-            live_snapshot = False
+        if (not self.has_min_version(MIN_LIBVIRT_LIVESNAPSHOT_VERSION,
+                                    MIN_QEMU_LIVESNAPSHOT_VERSION,
+                                    REQ_HYPERVISOR_LIVESNAPSHOT)
+            or source_format == "lvm"
+            or state == power_state.SHUTDOWN
+            or save_file is not None):
+            cold = True
 
         # NOTE(dkang): managedSave does not work for LXC
-        if CONF.libvirt_type != 'lxc' and not live_snapshot:
+        if CONF.libvirt_type != 'lxc' and cold:
             if state == power_state.RUNNING or state == power_state.PAUSED:
-                virt_dom.managedSave(0)
+                if save_file is not None:
+                    virt_dom.save(save_file)
+                else:
+                    virt_dom.managedSave(0)
 
         snapshot_backend = self.image_backend.snapshot(disk_path,
                 snapshot_name,
                 image_type=source_format)
 
-        if live_snapshot:
-            LOG.info(_("Beginning live snapshot process"),
-                     instance=instance)
-        else:
+        if cold:
             LOG.info(_("Beginning cold snapshot process"),
                      instance=instance)
             snapshot_backend.snapshot_create()
+        else:
+            LOG.info(_("Beginning warm snapshot process"),
+                     instance=instance)
 
         update_task_state(task_state=task_states.IMAGE_PENDING_UPLOAD)
         snapshot_directory = CONF.libvirt_snapshots_directory
@@ -1237,25 +1276,35 @@ class LibvirtDriver(driver.ComputeDriver):
         with utils.tempdir(dir=snapshot_directory) as tmpdir:
             try:
                 out_path = os.path.join(tmpdir, snapshot_name)
-                if live_snapshot:
+                if cold:
+                    snapshot_backend.snapshot_extract(out_path, image_format)
+                    if output_formatter is not None:
+                        out_path, metadata = output_formatter(out_path,
+                                                              metadata)
+                else:
                     # NOTE (rmk): libvirt needs to be able to write to the
                     #             temp directory, which is owned nova.
                     utils.execute('chmod', '777', tmpdir, run_as_root=True)
-                    self._live_snapshot(virt_dom, disk_path, out_path,
+                    self._warm_snapshot(virt_dom, disk_path, out_path,
                                         image_format)
-                else:
-                    snapshot_backend.snapshot_extract(out_path, image_format)
             finally:
-                if not live_snapshot:
+                if cold:
                     snapshot_backend.snapshot_delete()
                 # NOTE(dkang): because previous managedSave is not called
                 #              for LXC, _create_domain must not be called.
-                if CONF.libvirt_type != 'lxc' and not live_snapshot:
-                    if state == power_state.RUNNING:
-                        self._create_domain(domain=virt_dom)
-                    elif state == power_state.PAUSED:
-                        self._create_domain(domain=virt_dom,
-                                launch_flags=libvirt.VIR_DOMAIN_START_PAUSED)
+                if CONF.libvirt_type != 'lxc' and cold:
+                    if save_file is not None:
+                        if (state == power_state.RUNNING or
+                            state == power_state.PAUSED):
+                            # NOTE(vish): automatically restores previous state
+                            self._conn.restore(save_file)
+                    else:
+                        if state == power_state.RUNNING:
+                            self._create_domain(domain=virt_dom)
+                        elif state == power_state.PAUSED:
+                            flags = libvirt.VIR_DOMAIN_START_PAUSED
+                            self._create_domain(domain=virt_dom,
+                                                launch_flags=flags)
                 LOG.info(_("Snapshot extracted, beginning image upload"),
                          instance=instance)
 
@@ -1271,7 +1320,7 @@ class LibvirtDriver(driver.ComputeDriver):
                 LOG.info(_("Snapshot image upload complete"),
                          instance=instance)
 
-    def _live_snapshot(self, domain, disk_path, out_path, image_format):
+    def _warm_snapshot(self, domain, disk_path, out_path, image_format):
         """Snapshot an instance without downtime."""
         # Save a copy of the domain's running XML file
         xml = domain.XMLDesc(0)
@@ -1561,6 +1610,53 @@ class LibvirtDriver(driver.ComputeDriver):
                           run_as_root=True,
                           check_exit_code=[0, 1])
 
+    def _qemu_restore(self, instance, dom, memory_file):
+        QEMU_SAVE_HEADER_XML_SIZE_OFFSET = 20
+        QEMU_SAVE_HEADER_XML_OFFSET = 92
+
+        nxml = dom.XMLDesc(0)
+        # NOTE(vish): the usb controller isn't saved in the domain
+        nxml = re.sub("<controller type='usb'(?s).*?</controller>", "", nxml,
+                     flags=re.MULTILINE)
+        # NOTE(vish): mac address must match
+        mac = re.search("<mac address='([^']*)", nxml).groups()[0]
+
+        @utils.synchronized(os.path.basename(memory_file), external=True)
+        def sync_restore():
+            # NOTE(vish): restore seems to change the permissions of file
+            utils.execute('chmod', '666', memory_file, run_as_root=True)
+            with open(memory_file, "r+b") as f:
+                f.seek(QEMU_SAVE_HEADER_XML_SIZE_OFFSET)
+                xml_len = struct.unpack('i', f.read(4))[0]
+                f.seek(QEMU_SAVE_HEADER_XML_OFFSET)
+                # NOTE(vish): changing length of the xml is dangerous, so just
+                #             rewrite things that must match
+                xml = f.read(xml_len)
+                xml = re.sub("<name>[^<]*", "<name>%s" % instance['name'], xml)
+                xml = re.sub("<uuid>[^<]*", "<uuid>%s" % instance['uuid'], xml)
+                xml = re.sub("<entry name='uuid'>[^<]*",
+                             "<entry name='uuid'>%s" % instance['uuid'], xml)
+                xml = re.sub("<mac address='[^']*",
+                             "<mac address='%s" % mac, xml)
+                f.seek(QEMU_SAVE_HEADER_XML_OFFSET)
+                f.write(xml)
+
+            self._conn.restoreFlags(memory_file, nxml, 0)
+
+        sync_restore()
+
+        # NOTE(vish): detach and reattach nic device to make guest happy
+        nic_xml = re.search("(<interface(?s).*?</interface>)", nxml,
+                            flags=re.MULTILINE).groups()[0]
+        flags = libvirt.VIR_DOMAIN_AFFECT_CONFIG
+        state = LIBVIRT_POWER_STATE[dom.info()[0]]
+        if state == power_state.RUNNING:
+            flags |= libvirt.VIR_DOMAIN_AFFECT_LIVE
+        dom.detachDeviceFlags(nic_xml, flags)
+        # NOTE(vish): libvirt returns before the xml has been updated
+        time.sleep(1)
+        dom.attachDeviceFlags(nic_xml, flags)
+
     # NOTE(ilyaalekseyev): Implementation like in multinics
     # for xenapi(tr3buchet)
     def spawn(self, context, instance, image_meta, injected_files,
@@ -1569,19 +1665,31 @@ class LibvirtDriver(driver.ComputeDriver):
                                             instance,
                                             block_device_info,
                                             image_meta)
-        self._create_image(context, instance,
-                           disk_info['mapping'],
-                           network_info=network_info,
-                           block_device_info=block_device_info,
-                           files=injected_files,
-                           admin_pass=admin_password)
+        live = image_meta.get('container_format') == 'ovf'
+        if live and CONF.libvirt_type != 'qemu' and CONF.libvirt_type != 'kvm':
+            raise NotImplementedError()
+
+        memory_file = self._create_image(context, instance,
+                                         disk_info['mapping'],
+                                         network_info=network_info,
+                                         block_device_info=block_device_info,
+                                         files=injected_files,
+                                         admin_pass=admin_password,
+                                         live=live)
+
         xml = self.to_xml(instance, network_info,
                           disk_info, image_meta,
                           block_device_info=block_device_info,
                           write_to_disk=True)
 
-        self._create_domain_and_network(xml, instance, network_info,
-                                        block_device_info)
+        dom = self._create_domain_and_network(xml, instance, network_info,
+                                              block_device_info,
+                                              power_on=not live)
+
+
+        if live:
+            self._qemu_restore(instance, dom, memory_file)
+
         LOG.debug(_("Instance is running"), instance=instance)
 
         def _wait_for_boot():
@@ -1787,7 +1895,8 @@ class LibvirtDriver(driver.ComputeDriver):
     def _create_image(self, context, instance,
                       disk_mapping, suffix='',
                       disk_images=None, network_info=None,
-                      block_device_info=None, files=None, admin_pass=None):
+                      block_device_info=None, files=None, admin_pass=None,
+                      live=False):
         if not suffix:
             suffix = ''
 
@@ -1844,6 +1953,7 @@ class LibvirtDriver(driver.ComputeDriver):
 
         inst_type = flavors.extract_flavor(instance)
 
+        memory = None
         # NOTE(ndipanov): Even if disk_mapping was passed in, which
         # currently happens only on rescue - we still don't want to
         # create a base image.
@@ -1854,13 +1964,16 @@ class LibvirtDriver(driver.ComputeDriver):
             if size == 0 or suffix == '.rescue':
                 size = None
 
-            image('disk').cache(fetch_func=libvirt_utils.fetch_image,
-                                context=context,
-                                filename=root_fname,
-                                size=size,
-                                image_id=disk_images['image_id'],
-                                user_id=instance['user_id'],
-                                project_id=instance['project_id'])
+            root_disk = image('disk')
+            memory = root_disk.cache(fetch_func=libvirt_utils.fetch_image,
+                                     context=context,
+                                     filename=root_fname,
+                                     size=size,
+                                     image_id=disk_images['image_id'],
+                                     user_id=instance['user_id'],
+                                     project_id=instance['project_id'],
+                                     live=live,
+                                     tmpdir=CONF.libvirt_snapshots_directory)
 
         # Lookup the filesystem type if required
         os_type_with_default = instance['os_type']
@@ -1977,6 +2090,7 @@ class LibvirtDriver(driver.ComputeDriver):
 
         if CONF.libvirt_type == 'uml':
             libvirt_utils.chown(image('disk').path, 'root')
+        return memory
 
     def get_host_capabilities(self):
         """Returns an instance of config.LibvirtConfigCaps representing

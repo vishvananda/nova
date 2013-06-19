@@ -59,6 +59,23 @@ CONF.import_opt('preallocate_images', 'nova.virt.driver')
 LOG = logging.getLogger(__name__)
 
 
+def create_live_container(live_file, disk_file, memory_file):
+    disk_path, disk_file = os.path.split(disk_file)
+    utils.execute('chmod', '666', memory_file, run_as_root=True)
+    memory_path, memory_file = os.path.split(memory_file)
+    utils.execute('tar', 'zcf', live_file, '-C', disk_path, disk_file,
+                  '-C', memory_path, memory_file)
+
+
+def extract_live_container(live_file, disk_file, memory_file, tmpdir=None):
+    with utils.tempdir(dir=tmpdir) as tmp:
+        utils.execute('tar', 'zxf', live_file, '-C', tmp)
+        tmp_disk = os.path.join(tmp, 'disk')
+        tmp_memory = os.path.join(tmp, 'memory')
+        utils.execute('mv', '-f', tmp_disk, disk_file)
+        utils.execute('mv', '-f', tmp_memory, memory_file)
+
+
 class Image(object):
     __metaclass__ = abc.ABCMeta
 
@@ -126,7 +143,9 @@ class Image(object):
                         setattr(info, scope[1], value)
         return info
 
-    def cache(self, fetch_func, filename, size=None, *args, **kwargs):
+
+    def cache(self, fetch_func, filename, size=None, live=False, tmpdir=None,
+              *args, **kwargs):
         """Creates image from template.
 
         Ensures that template and image not already exists.
@@ -137,26 +156,37 @@ class Image(object):
                      Should accept `target` argument.
         :filename: Name of the file in the image directory
         :size: Size of created image in bytes (optional)
+        :live: Whether image is a live container (optional)
+        :tmpdir: Where to create tmpdir for live extraction (optional)
         """
-        @utils.synchronized(filename, external=True, lock_path=self.lock_path)
-        def call_if_not_exists(target, *args, **kwargs):
-            if not os.path.exists(target):
-                fetch_func(target=target, *args, **kwargs)
-            elif CONF.libvirt_images_type == "lvm" and \
-                    'ephemeral_size' in kwargs:
-                fetch_func(target=target, *args, **kwargs)
-
         base_dir = os.path.join(CONF.instances_path, CONF.base_dir_name)
         if not os.path.exists(base_dir):
             fileutils.ensure_tree(base_dir)
         base = os.path.join(base_dir, filename)
+        memory_file = '%s.memory' % base
 
-        if not os.path.exists(self.path) or not os.path.exists(base):
+        @utils.synchronized(filename, external=True, lock_path=self.lock_path)
+        def call_if_not_exists(target, *args, **kwargs):
+            if live and (not os.path.exists(target) or
+                         not os.path.exists(memory_file)):
+                live_file = '%s.live' % base
+                if (not os.path.exists(live_file)):
+                    fetch_func(target=live_file, *args, **kwargs)
+                extract_live_container(live_file, target, memory_file,
+                                       tmpdir=tmpdir)
+            elif (not os.path.exists(target) or
+                  (CONF.libvirt_images_type == "lvm" and
+                   'ephemeral_size' in kwargs)):
+                fetch_func(target=target, *args, **kwargs)
+
+        if (not os.path.exists(self.path) or not os.path.exists(base)
+            or (live and not os.path.exists(memory_file))):
             self.create_image(call_if_not_exists, base, size,
                               *args, **kwargs)
 
         if size and self.preallocate and self._can_fallocate():
             utils.execute('fallocate', '-n', '-l', size, self.path)
+        return memory_file
 
     def _can_fallocate(self):
         """Check once per class, whether fallocate(1) is available,
@@ -250,9 +280,8 @@ class Qcow2(Image):
             if size:
                 disk.extend(target, size)
 
-        # Download the unmodified base image unless we already have a copy.
-        if not os.path.exists(base):
-            prepare_template(target=base, *args, **kwargs)
+        # Download the unmodified base image (existence is checked in prepare)
+        prepare_template(target=base, *args, **kwargs)
 
         legacy_backing_size = None
         legacy_base = base

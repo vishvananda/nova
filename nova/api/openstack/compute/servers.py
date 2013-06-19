@@ -1359,10 +1359,10 @@ class Controller(wsgi.Controller):
                                                        image_name,
                                                        extra_properties=props)
             else:
-                image = self.compute_api.snapshot(context,
-                                                  instance,
-                                                  image_name,
-                                                  extra_properties=props)
+                image = self.compute_api.live_snapshot(context,
+                                                       instance,
+                                                       image_name,
+                                                       extra_properties=props)
         except exception.InstanceInvalidState as state_error:
             common.raise_http_conflict_for_instance_invalid_state(state_error,
                         'createImage')
