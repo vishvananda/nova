@@ -359,9 +359,10 @@ class InstanceMetadata():
         return self._check_version(required, requested, OPENSTACK_VERSIONS)
 
     def _get_hostname(self):
-        return "%s%s%s" % (self.instance['hostname'],
-                           '.' if CONF.dhcp_domain else '',
-                           CONF.dhcp_domain)
+        return "%s.%s%s%s" % (self.instance['hostname'],
+                              self.instance['project_id'],
+                              '.' if CONF.dhcp_domain else '',
+                              CONF.dhcp_domain)
 
     def lookup(self, path):
         if path == "" or path[0] != "/":

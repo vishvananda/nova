@@ -1174,21 +1174,24 @@ def _host_dhcp_network(data):
 def _host_dhcp(data):
     """Return a host string for an address in dhcp-host format."""
     if CONF.use_single_default_gateway:
-        return '%s,%s.%s,%s,%s' % (data['vif_address'],
+        return '%s,%s.%s.%s,%s,%s' % (data['vif_address'],
                                data['instance_hostname'],
+                               data['project_id'],
                                CONF.dhcp_domain,
                                data['address'],
                                'net:' + _host_dhcp_network(data))
     else:
-        return '%s,%s.%s,%s' % (data['vif_address'],
+        return '%s,%s.%s.%s,%s' % (data['vif_address'],
                                data['instance_hostname'],
+                               data['project_id'],
                                CONF.dhcp_domain,
                                data['address'])
 
 
 def _host_dns(data):
-    return '%s\t%s.%s' % (data['address'],
+    return '%s\t%s.%s.%s' % (data['address'],
                           data['instance_hostname'],
+                          data['project_id'],
                           CONF.dhcp_domain)
 
 
