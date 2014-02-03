@@ -742,6 +742,17 @@ class RoleCheck(Check):
         return self.match.lower() in [x.lower() for x in creds['roles']]
 
 
+@register("prefix")
+class PrefixCheck(Check):
+    def __call__(self, target, creds):
+        """Check that the target starts with item in the creds dict."""
+        source, _, match = self.match.partition(':')
+        match = match % target
+        if source in creds:
+            return match.startswith(unicode(creds[source]))
+        return False
+
+
 @register('http')
 class HttpCheck(Check):
     def __call__(self, target, creds):

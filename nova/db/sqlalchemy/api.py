@@ -224,13 +224,14 @@ def model_query(context, model, *args, **kwargs):
         raise Exception(_("Unrecognized read_deleted value '%s'")
                             % read_deleted)
 
+    like = '%s%%' % context.project_id
     if nova.context.is_user_context(context) and project_only:
         if project_only == 'allow_none':
             query = query.\
-                filter(or_(base_model.project_id == context.project_id,
+                filter(or_(base_model.project_id.like(like),
                            base_model.project_id == None))
         else:
-            query = query.filter_by(project_id=context.project_id)
+            query = query.filter(base_model.project_id.like(like))
 
     return query
 
@@ -1931,11 +1932,14 @@ def instance_get_all_by_filters(context, filters, sort_key, sort_dir,
 
     # Filters for exact matches that we can do along with the SQL query...
     # For other filters that don't match this, we will do regexp matching
-    exact_match_filter_names = ['project_id', 'user_id', 'image_ref',
+    exact_match_filter_names = ['user_id', 'image_ref',
                                 'vm_state', 'instance_type_id', 'uuid',
                                 'metadata', 'host', 'task_state',
                                 'system_metadata']
 
+    query_prefix = prefix_filter(query_prefix, models.Instance,
+                                 {'project_id': filters['project_id']})
+    filters.pop('project_id')
     # Filter the query
     query_prefix = exact_filter(query_prefix, models.Instance,
                                 filters, exact_match_filter_names)
@@ -2050,6 +2054,28 @@ def regex_filter(query, model, filters):
             query = query.filter(column_attr.op(db_regexp_op)(
                                  str(filters[filter_name])))
     return query
+
+def prefix_filter(query, model, filters):
+    """Applies prefix filtering to a query.
+
+    Returns the updated query.
+
+    :param query: query to apply filters to
+    :param model: model object the query applies to
+    :param filters: dictionary of filters with string prefixes
+    """
+
+    for filter_name in filters.iterkeys():
+        try:
+            column_attr = getattr(model, filter_name)
+        except AttributeError:
+            continue
+        if 'property' == type(column_attr).__name__:
+            continue
+        like = '%s%%' % filters[filter_name]
+        query = query.filter(column_attr.like(like))
+    return query
+
 
 
 @require_context
