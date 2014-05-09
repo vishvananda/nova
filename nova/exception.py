@@ -578,8 +578,49 @@ class NetworkInUse(NovaException):
     msg_fmt = _("Network %(network_id)s is still in use.")
 
 
-class NetworkNotCreated(NovaException):
+class InvalidNetworkParam(Invalid):
+    # NOTE(vish) base class for network create param errors
+    code = 422
+
+
+class NetworkNotCreated(InvalidNetworkParam):
     msg_fmt = _("%(req)s is required to create a network.")
+
+
+class LabelTooLong(InvalidNetworkParam):
+    msg_fmt = _("Maximum allowed length for 'label' is 255.")
+
+
+class InvalidIntValue(InvalidNetworkParam):
+    msg_fmt = _("%(key)s must be an integer.")
+
+
+class InvalidCidr(InvalidNetworkParam):
+    msg_fmt = _("%(cidr)s is not a valid ip network.")
+
+
+class InvalidAddress(InvalidNetworkParam):
+    msg_fmt = _("%(address)s is not a valid ip address.")
+
+
+class AddressOutOfRange(InvalidNetworkParam):
+    msg_fmt = _("%(address)s is not within %(cidr)s.")
+
+
+class DuplicateVlan(NovaException):
+    msg_fmt = _("Detected existing vlan with id %(vlan)d")
+    code = 409
+
+
+class CidrConflict(NovaException):
+    msg_fmt = _('Requested cidr (%(cidr)s) conflicts '
+                'with existing cidr (%(other)s)')
+    code = 409
+
+
+class NetworkHasProject(NetworkInUse):
+    msg_fmt = _('Network must be disassociated from project '
+                '%(project_id)s before it can be deleted.')
 
 
 class NetworkNotFound(NotFound):
@@ -1204,15 +1245,6 @@ class InstancePasswordSetFailed(NovaException):
     msg_fmt = _("Failed to set admin password on %(instance)s "
                 "because %(reason)s")
     safe = True
-
-
-class DuplicateVlan(NovaException):
-    msg_fmt = _("Detected existing vlan with id %(vlan)d")
-
-
-class CidrConflict(NovaException):
-    msg_fmt = _("There was a conflict when trying to complete your request.")
-    code = 409
 
 
 class InstanceNotFound(NotFound):

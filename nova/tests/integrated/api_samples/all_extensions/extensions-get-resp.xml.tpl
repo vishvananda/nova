@@ -168,6 +168,9 @@
   <extension alias="os-networks-associate" updated="%(isotime)s" namespace="http://docs.openstack.org/compute/ext/networks_associate/api/v2" name="NetworkAssociationSupport">
     <description>%(text)s</description>
   </extension>
+  <extension alias="os-extended-networks" updated="%(isotime)s" namespace="http://docs.openstack.org/compute/ext/extended_networks/api/v2" name="ExtendedNetworks">
+    <description>%(text)s</description>
+  </extension>
   <extension alias="os-extended-quotas" updated="%(isotime)s" namespace="http://docs.openstack.org/compute/ext/extended_quotas/api/v1.1" name="ExtendedQuotas">
     <description>%(text)s</description>
   </extension>

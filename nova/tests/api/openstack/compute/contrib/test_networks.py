@@ -25,6 +25,7 @@ import webob
 
 from nova.api.openstack.compute.contrib import networks_associate
 from nova.api.openstack.compute.contrib import os_networks as networks
+from nova.api.openstack import extensions
 import nova.context
 from nova import exception
 from nova import test
@@ -50,6 +51,8 @@ FAKE_NETWORKS = [
         'dns1': None, 'dns2': None, 'host': 'nsokolov-desktop',
         'gateway_v6': None, 'netmask_v6': None, 'priority': None,
         'created_at': datetime.datetime(2011, 8, 15, 6, 19, 19, 387525),
+        'mtu': None, 'dhcp_server': '10.0.0.1', 'enable_dhcp': True,
+        'share_address': False,
     },
     {
         'bridge': 'br101', 'vpn_public_port': 1001,
@@ -65,6 +68,8 @@ FAKE_NETWORKS = [
         'multi_host': False, 'dns1': None, 'dns2': None, 'host': None,
         'gateway_v6': None, 'netmask_v6': None, 'priority': None,
         'created_at': datetime.datetime(2011, 8, 15, 6, 19, 19, 885495),
+        'mtu': None, 'dhcp_server': '10.0.0.9', 'enable_dhcp': True,
+        'share_address': False,
     },
 ]
 
@@ -199,8 +204,11 @@ class NetworksTest(test.NoDBTestCase):
     def setUp(self):
         super(NetworksTest, self).setUp()
         self.fake_network_api = FakeNetworkAPI()
+        ext_mgr = extensions.ExtensionManager()
+        ext_mgr.extensions = {'os-extended-networks': 'fake'}
         self.controller = networks.NetworkController(
-                                                self.fake_network_api)
+                                                self.fake_network_api,
+                                                ext_mgr)
         self.associate_controller = networks_associate\
             .NetworkAssociateActionController(self.fake_network_api)
         fakes.stub_out_networking(self.stubs)
