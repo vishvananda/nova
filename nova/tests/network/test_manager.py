@@ -336,6 +336,34 @@ class FlatNetworkTestCase(test.TestCase):
         self.assertEqual(3, db.network_count_reserved_ips(context_admin,
                         network['id']))
 
+    def test_validate_reserved_start_end(self):
+        context_admin = context.RequestContext('testuser', 'testproject',
+                                              is_admin=True)
+        nets = self.network.create_networks(context_admin, 'fake',
+                                       '192.168.0.0/24', False, 1,
+                                       256, allowed_start='192.168.0.10',
+                                       allowed_end='192.168.0.245')
+        self.assertEqual(1, len(nets))
+        network = nets[0]
+        # NOTE(vish): 10 from the beginning, 10 from the end, and
+        #             1 for the gateway/dhcp server
+        self.assertEqual(21, db.network_count_reserved_ips(context_admin,
+                        network['id']))
+
+    def test_validate_reserved_start_out_of_range(self):
+        context_admin = context.RequestContext('testuser', 'testproject',
+                                              is_admin=True)
+        self.assertRaises(ValueError, self.network.create_networks,
+                          context_admin, 'fake', '192.168.0.0/24', False,
+                          1, 256, allowed_start='192.168.1.10')
+
+    def test_validate_reserved_end_invalid(self):
+        context_admin = context.RequestContext('testuser', 'testproject',
+                                              is_admin=True)
+        self.assertRaises(ValueError, self.network.create_networks,
+                          context_admin, 'fake', '192.168.0.0/24', False,
+                          1, 256, allowed_end='invalid')
+
     def test_validate_networks_none_requested_networks(self):
         self.network.validate_networks(self.context, None)
 
@@ -1729,7 +1757,8 @@ class CommonNetworkTestCase(test.TestCase):
         self.assertTrue(res)
 
     def fake_create_fixed_ips(self, context, network_id, fixed_cidr=None,
-                              extra_reserved=None):
+                              extra_reserved=None, bottom_reserved=0,
+                              top_reserved=0):
         return None
 
     def test_get_instance_nw_info_client_exceptions(self):
